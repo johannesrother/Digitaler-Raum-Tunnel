@@ -1,5 +1,3 @@
-import { createOrganicBoulder, createOrganicSurface } from "./geometry.js";
-
 const TERRAIN_SIZE = 92;
 const START_POSITION = new BABYLON.Vector3(0, 0, -5.5);
 
@@ -28,16 +26,13 @@ export function createTerrain(scene, materials) {
   terrain.receiveShadows = true;
   terrain.isPickable = false;
 
-  const mossPatches = createMossTransitions(scene, materials);
-  const boulders = createLandscapeBoulders(scene, materials);
   const distantLandscape = createDistantLandscapeRing(scene, materials);
 
   return {
     terrain,
     startPosition: START_POSITION.clone(),
     getGroundHeight: getLandscapeHeight,
-    shadowCasters: boulders.close,
-    mossPatches,
+    shadowCasters: [],
     distantLandscape,
   };
 }
@@ -116,58 +111,4 @@ export function getTerrainHeight(x, z) {
 
 function getLandscapeHeight(x, z) {
   return getTerrainHeight(x, z);
-}
-
-function createMossTransitions(scene, materials) {
-  const definitions = [
-    [-7.8, -4.6, 3.8, 2.1, 121],
-    [4.8, -4.1, 3.6, 1.85, 122],
-    [-8.8, 3.7, 4.2, 2.7, 123],
-    [3.4, 5.4, 4.8, 2.55, 124],
-    [10.1, 9.6, 3.6, 2.3, 125],
-    [-2.4, 11.4, 4.1, 2.2, 126],
-    [-14.6, 8.2, 4.9, 2.8, 127],
-    [10.4, -10.4, 4.6, 2.6, 128],
-    [-11.8, -12.3, 5, 2.85, 129],
-  ];
-
-  return definitions.map(([x, z, radiusX, radiusZ, seed], index) => {
-    const patch = createOrganicSurface(scene, `moss-transition-${index}`, {
-      center: new BABYLON.Vector3(x, getLandscapeHeight(x, z) + 0.018, z),
-      radiusX,
-      radiusZ,
-      segments: 38,
-      irregularity: 0.24,
-      seed,
-    });
-    patch.material = materials.moss;
-    patch.isPickable = false;
-    return patch;
-  });
-}
-
-function createLandscapeBoulders(scene, materials) {
-  const definitions = [
-    [-4.4, -8.7, 1.1, 0.74, 0.98, 131],
-    [5.2, -7.7, 1.45, 0.86, 1.1, 132],
-    [-10.4, -1.6, 1.25, 0.95, 1.25, 133],
-    [8.1, 2.5, 1.32, 0.78, 1.08, 134],
-    [-12.6, 5.2, 1.72, 1.2, 1.52, 135],
-    [5.8, 8.6, 1.6, 0.96, 1.28, 136],
-    [13.1, 7.7, 1.85, 1.35, 1.55, 137],
-    [-4.4, 13.7, 1.55, 0.92, 1.22, 138],
-    [-12.2, -10.8, 1.7, 1.12, 1.42, 139],
-    [13.8, -10.4, 1.8, 1.1, 1.55, 140],
-  ];
-
-  const close = definitions.map(([x, z, scaleX, scaleY, scaleZ, seed], index) =>
-    createOrganicBoulder(scene, `landscape-boulder-${index}`, {
-      position: new BABYLON.Vector3(x, getLandscapeHeight(x, z) + scaleY * 0.38, z),
-      scaling: new BABYLON.Vector3(scaleX, scaleY, scaleZ),
-      seed,
-      material: index % 3 === 0 ? materials.mineralWeathered : materials.mineral,
-      subdivisions: 5,
-    }),
-  );
-  return { close };
 }

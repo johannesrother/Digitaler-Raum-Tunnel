@@ -11,6 +11,18 @@ export function createGoldenHourLighting(scene) {
   scene.imageProcessingConfiguration.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES;
   scene.imageProcessingConfiguration.exposure = 1.03;
   scene.imageProcessingConfiguration.contrast = 1.06;
+  // This local HDR is used only for PBR reflections and ambient light. The
+  // visible sky remains generated geometry, never a reference-image panorama.
+  scene.environmentTexture = new BABYLON.HDRCubeTexture(
+    "./assets/hdr/grasslands_sunset_1k.hdr",
+    scene,
+    128,
+    false,
+    true,
+    false,
+    true,
+  );
+  scene.environmentIntensity = 0.34;
   createProceduralSky(scene);
 
   const skyFill = new BABYLON.HemisphericLight(

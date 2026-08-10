@@ -2,6 +2,7 @@ import { createOrganicSurface } from "./geometry.js";
 
 /** Calm shallow pools reinforce depth without introducing dramatic movement. */
 export function createWater(scene, materials, getGroundHeight) {
+  const waterMaterial = createWaterMaterial(scene);
   const pools = [
     { x: -10.5, z: -2.8, radiusX: 4.2, radiusZ: 2.2, seed: 401 },
     { x: -5.4, z: 8.4, radiusX: 3.3, radiusZ: 1.55, seed: 402 },
@@ -22,13 +23,63 @@ export function createWater(scene, materials, getGroundHeight) {
       irregularity: 0.16,
       seed: definition.seed,
     });
-    pool.material = materials.water;
+    pool.material = waterMaterial;
     pool.isPickable = false;
     return pool;
   });
 
-  const stream = createQuietStream(scene, materials.water, getGroundHeight);
-  return { pools, stream };
+  const stream = createQuietStream(scene, waterMaterial, getGroundHeight);
+  return {
+    pools,
+    stream,
+    configureReflections(meshes) {
+      meshes.forEach((mesh) => waterMaterial.addToRenderList(mesh));
+    },
+  };
+}
+
+function createWaterMaterial(scene) {
+  const material = new BABYLON.WaterMaterial(
+    "quiet-reflective-water",
+    scene,
+    new BABYLON.Vector2(256, 256),
+  );
+  material.bumpTexture = createRippleNormal(scene);
+  material.windForce = 0.35;
+  material.waveHeight = 0.018;
+  material.bumpHeight = 0.08;
+  material.waveLength = 0.34;
+  material.windDirection = new BABYLON.Vector2(0.25, 0.68);
+  material.waterColor = BABYLON.Color3.FromHexString("#6b9c91");
+  material.colorBlendFactor = 0.24;
+  material.fresnelLevel = 0.72;
+  material.specularPower = 128;
+  material.backFaceCulling = false;
+  return material;
+}
+
+function createRippleNormal(scene) {
+  const texture = new BABYLON.DynamicTexture("water-ripple-normal", { width: 128, height: 128 }, scene, false);
+  const context = texture.getContext();
+  context.fillStyle = "#8080ff";
+  context.fillRect(0, 0, 128, 128);
+  for (let index = 0; index < 28; index += 1) {
+    const x = (index * 37) % 128;
+    const y = (index * 61) % 128;
+    const radius = 3 + ((index * 11) % 12);
+    const gradient = context.createRadialGradient(x, y, 1, x, y, radius);
+    gradient.addColorStop(0, "rgba(180, 110, 255, 0.52)");
+    gradient.addColorStop(0.5, "rgba(80, 160, 255, 0.22)");
+    gradient.addColorStop(1, "rgba(128, 128, 255, 0)");
+    context.fillStyle = gradient;
+    context.beginPath();
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.fill();
+  }
+  texture.wrapU = BABYLON.Texture.WRAP_ADDRESSMODE;
+  texture.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
+  texture.update(false);
+  return texture;
 }
 
 function createQuietStream(scene, material, getGroundHeight) {

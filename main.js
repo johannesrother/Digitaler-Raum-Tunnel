@@ -9,7 +9,7 @@ async function startExperience() {
   const enterVrButton = document.getElementById("enter-vr");
 
   const engine = createEngine(canvas);
-  const scene = createIdyllScene(engine, canvas);
+  const scene = await createIdyllScene(engine, canvas);
   const removeResizeHandling = configureResizeHandling(engine);
 
   // Start desktop rendering immediately; WebXR initialisation is non-blocking.
