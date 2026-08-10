@@ -81,3 +81,18 @@ body {
   margin: 0;
   color: #f4f5f7;
 }
+
+.tunnel-debug-panel {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 2;
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  color: #f7eadc;
+  background: rgb(12 12 16 / 82%);
+  border: 1px solid rgb(247 234 220 / 22%);
+  border-radius: 0.3rem;
+  font: 0.75rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  pointer-events: none;
+}

@@ -36,8 +36,11 @@ export function createBreeze(scene, placedAssets, attractionTarget) {
 
   let elapsed = 0;
   let attraction = 0;
+  let previousFrameTime = performance.now();
   const observer = scene.onBeforeRenderObservable.add(() => {
-    elapsed += Math.min(scene.getEngine().getDeltaTime(), 40) / 1000;
+    const frameTime = performance.now();
+    elapsed += Math.min((frameTime - previousFrameTime) / 1000, 0.04);
+    previousFrameTime = frameTime;
     anchorStates.forEach((state) => animateAnchor(state, elapsed, attraction));
     fernFrondStates.forEach((state) => animateFernFrond(state, elapsed, attraction));
   });

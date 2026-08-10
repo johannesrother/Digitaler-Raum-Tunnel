@@ -58,6 +58,10 @@ export function createGoldenHourLighting(scene) {
     addShadowCasters(meshes) {
       meshes.forEach((mesh) => shadows.addShadowCaster(mesh, true));
     },
+    excludeFromTunnel(mesh) {
+      sun.excludedMeshes.push(mesh);
+      skyFill.excludedMeshes.push(mesh);
+    },
     freeze() {
       shadows.getShadowMap().refreshRate = BABYLON.RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
     },

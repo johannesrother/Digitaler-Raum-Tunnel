@@ -36,6 +36,8 @@ export async function createIdyllEnvironment(scene) {
 
   return {
     startPosition: terrain.startPosition,
+    materials,
+    lighting,
     terrain,
     water,
     assets,

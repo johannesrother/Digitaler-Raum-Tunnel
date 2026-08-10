@@ -28,6 +28,7 @@ async function startExperience() {
     () => {
       removeResizeHandling();
       scene.metadata.transition.dispose();
+      scene.metadata.tunnel.dispose();
       scene.dispose();
       engine.dispose();
     },
