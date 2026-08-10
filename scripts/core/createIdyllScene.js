@@ -12,8 +12,12 @@ export async function createIdyllScene(engine, canvas) {
   const desktopCamera = createDesktopCamera(scene, canvas, environment.startPosition);
   const tunnel = createOrganicTunnel(scene, {
     entrance: environment.architecture.entrance,
+    grassMaterial: environment.materials.terrain,
+    getGroundHeight: environment.terrain.getGroundHeight,
   });
   environment.lighting.excludeFromTunnel(tunnel.mesh);
+  environment.lighting.excludeFromTunnel(tunnel.floor);
+  tunnel.grassPatches.forEach((patch) => environment.lighting.excludeFromTunnel(patch));
   const transition = createIdyllTunnelTransition(scene, {
     startPosition: environment.startPosition,
     entrance: environment.architecture.entrance,

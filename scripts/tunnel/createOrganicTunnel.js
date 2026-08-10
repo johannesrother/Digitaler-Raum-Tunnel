@@ -5,6 +5,7 @@ import {
   getTunnelPhase,
   getTunnelTwitchInterval,
 } from "./tunnelConfig.js";
+import { createTunnelFloor } from "./createTunnelFloor.js";
 
 const EYE_HEIGHT = 1.65;
 const PATH_SAMPLES = 188;
@@ -22,8 +23,19 @@ export function createOrganicTunnel(scene, options) {
   mesh.material = material;
   mesh.isPickable = false;
   mesh.receiveShadows = false;
+  const entranceFloorHeight = typeof options.getGroundHeight === "function"
+    ? options.getGroundHeight(route.start.x, route.start.z) + 0.05
+    : route.start.y;
+  const floorTransition = createTunnelFloor(
+    scene,
+    route,
+    material,
+    options.grassMaterial,
+    entranceFloorHeight,
+  );
 
-  const lights = createTunnelLights(scene, mesh, route);
+  const litMeshes = [mesh, floorTransition.floor, ...floorTransition.grassPatches];
+  const lights = createTunnelLights(scene, litMeshes, route);
   let nextImpulseAt = 12.7;
   let impulse = 0;
   let activeTime = 0;
@@ -39,9 +51,14 @@ export function createOrganicTunnel(scene, options) {
 
   return {
     mesh,
+    floor: floorTransition.floor,
+    grassPatches: floorTransition.grassPatches,
+    grassFadeDistance: floorTransition.grassFadeDistance,
     route,
     setEnabled(enabled) {
       mesh.setEnabled(enabled);
+      floorTransition.floor.setEnabled(enabled);
+      floorTransition.grassPatches.forEach((patch) => patch.setEnabled(enabled));
       lights.points.forEach((light) => light.setEnabled(enabled));
       lights.fill.setEnabled(enabled);
     },
@@ -61,6 +78,8 @@ export function createOrganicTunnel(scene, options) {
       scene.onBeforeRenderObservable.remove(observer);
       lights.points.forEach((light) => light.dispose());
       lights.fill.dispose();
+      floorTransition.grassPatches.forEach((patch) => patch.dispose());
+      floorTransition.floor.dispose();
       mesh.dispose();
       material.dispose();
     },
@@ -111,6 +130,39 @@ function createTunnelRoute(entrance) {
       const index = Math.min(PATH_SAMPLES - 1, Math.floor(floatIndex));
       return BABYLON.Vector3.Lerp(samples[index].point, samples[index + 1].point, floatIndex - index);
     },
+    distanceAtProgress(progress) {
+      const clamped = BABYLON.Scalar.Clamp(progress, 0, 1);
+      const floatIndex = clamped * PATH_SAMPLES;
+      const index = Math.min(PATH_SAMPLES - 1, Math.floor(floatIndex));
+      return BABYLON.Scalar.Lerp(samples[index].length, samples[index + 1].length, floatIndex - index);
+    },
+    progressAtDistance(distance) {
+      const clamped = BABYLON.Scalar.Clamp(distance, 0, totalLength);
+      let lower = 0;
+      let upper = samples.length - 1;
+      while (upper - lower > 1) {
+        const middle = Math.floor((lower + upper) / 2);
+        if (samples[middle].length < clamped) {
+          lower = middle;
+        } else {
+          upper = middle;
+        }
+      }
+      const span = Math.max(samples[upper].length - samples[lower].length, 0.0001);
+      return (lower + (clamped - samples[lower].length) / span) / PATH_SAMPLES;
+    },
+    tangentAt(progress) {
+      const step = 1 / PATH_SAMPLES;
+      const before = this.positionAt(Math.max(0, progress - step));
+      const after = this.positionAt(Math.min(1, progress + step));
+      return after.subtract(before).normalize();
+    },
+    frameAt(progress) {
+      const tangent = this.tangentAt(progress);
+      const lateral = BABYLON.Vector3.Cross(BABYLON.Axis.Y, tangent).normalize();
+      const vertical = BABYLON.Vector3.Cross(tangent, lateral).normalize();
+      return { position: this.positionAt(progress), tangent, lateral, vertical };
+    },
   };
 }
 
@@ -126,11 +178,7 @@ function createTunnelShell(scene, route) {
     const time = progress * TUNNEL_DURATION;
     const center = route.positionAt(progress);
     center.y += EYE_HEIGHT;
-    const before = route.positionAt(Math.max(0, progress - 1 / PATH_SAMPLES));
-    const after = route.positionAt(Math.min(1, progress + 1 / PATH_SAMPLES));
-    const tangent = after.subtract(before).normalize();
-    const lateral = BABYLON.Vector3.Cross(BABYLON.Axis.Y, tangent).normalize();
-    const vertical = BABYLON.Vector3.Cross(tangent, lateral).normalize();
+    const { lateral, vertical } = route.frameAt(progress);
     const diameter = getTunnelDiameter(time);
     const look = getTunnelLook(time);
 
@@ -224,7 +272,7 @@ function createTunnelMaterial(scene) {
   return material;
 }
 
-function createTunnelLights(scene, mesh, route) {
+function createTunnelLights(scene, meshes, route) {
   const points = [0.01, 0.25, 0.52, 0.77, 0.94].map((progress, index) => {
     const position = route.positionAt(progress);
     position.y += EYE_HEIGHT;
@@ -234,14 +282,14 @@ function createTunnelLights(scene, mesh, route) {
     light.diffuse = index < 2
       ? BABYLON.Color3.FromHexString("#ffd1a3")
       : BABYLON.Color3.FromHexString("#8f9bad");
-    light.includedOnlyMeshes.push(mesh);
+    light.includedOnlyMeshes.push(...meshes);
     return light;
   });
   const fill = new BABYLON.HemisphericLight("organic-tunnel-low-fill", BABYLON.Axis.Y, scene);
   fill.diffuse = BABYLON.Color3.FromHexString("#aeb7c4");
   fill.groundColor = BABYLON.Color3.FromHexString("#321d26");
   fill.intensity = 0.2;
-  fill.includedOnlyMeshes.push(mesh);
+  fill.includedOnlyMeshes.push(...meshes);
   return { points, fill };
 }
 

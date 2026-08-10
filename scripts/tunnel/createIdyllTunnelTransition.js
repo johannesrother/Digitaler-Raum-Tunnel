@@ -21,11 +21,15 @@ export function createIdyllTunnelTransition(scene, options) {
   const debug = createDebugPanel();
   let elapsed = 0;
   let xrCamera = null;
-  let inXr = false;
   let tunnelVisible = false;
   let previousFrameTime = performance.now();
+  const initialHeading = headingFrom(options.initialForward);
 
+  // Keep the camera at the root origin. The root can now yaw along the
+  // spline without orbiting a desktop camera around the world origin.
+  root.position.copyFrom(start);
   options.desktopCamera.parent = root;
+  options.desktopCamera.position.set(0, options.desktopCamera.position.y - start.y, 0);
   options.tunnel.setEnabled(false);
 
   const observer = scene.onBeforeRenderObservable.add(() => {
@@ -44,7 +48,7 @@ export function createIdyllTunnelTransition(scene, options) {
         options.tunnel.setEnabled(true);
         tunnelVisible = true;
       }
-      applyPathPosition(root, route.positionAtTime(tunnelTime), start, inXr);
+      applyPathTransform(root, route, tunnelTime, initialHeading, delta);
     }
     debug.update(elapsed, tunnelTime);
   });
@@ -59,16 +63,14 @@ export function createIdyllTunnelTransition(scene, options) {
         if (isInXr) {
           xrCamera = xr.baseExperience.camera;
           xrCamera.parent = root;
-          inXr = true;
-          applyPathPosition(root, route.positionAtTime(Math.max(0, elapsed - 20)), start, true);
+          applyPathTransform(root, route, Math.max(0, elapsed - 20), initialHeading, 0);
           return;
         }
         if (xrCamera) {
           xrCamera.parent = null;
           xrCamera = null;
         }
-        inXr = false;
-        applyPathPosition(root, route.positionAtTime(Math.max(0, elapsed - 20)), start, false);
+        applyPathTransform(root, route, Math.max(0, elapsed - 20), initialHeading, 0);
       });
     },
     dispose() {
@@ -120,17 +122,30 @@ function createTimedRoute(entryPoints, tunnelRoute) {
   const totalLength = lengths.at(-1);
   const distanceTable = createDistanceTable(totalLength);
 
+  const positionAtTime = (time) => {
+    const clamped = BABYLON.Scalar.Clamp(time, 0, TUNNEL_DURATION);
+    const distance = sampleDistance(distanceTable, clamped);
+    const next = lengths.findIndex((length) => length >= distance);
+    if (next <= 0) {
+      return points[0].clone();
+    }
+    const before = lengths[next - 1];
+    const span = Math.max(lengths[next] - before, 0.0001);
+    return BABYLON.Vector3.Lerp(points[next - 1], points[next], (distance - before) / span);
+  };
+
   return {
-    positionAtTime(time) {
-      const clamped = BABYLON.Scalar.Clamp(time, 0, TUNNEL_DURATION);
-      const distance = sampleDistance(distanceTable, clamped);
-      const next = lengths.findIndex((length) => length >= distance);
-      if (next <= 0) {
-        return points[0].clone();
-      }
-      const before = lengths[next - 1];
-      const span = Math.max(lengths[next] - before, 0.0001);
-      return BABYLON.Vector3.Lerp(points[next - 1], points[next], (distance - before) / span);
+    positionAtTime,
+    tangentAtTime(time) {
+      // A short future sample filters tiny spline detail without delaying the
+      // turning response into a visible late rotation.
+      const before = positionAtTime(Math.max(0, time - 0.18));
+      const after = positionAtTime(Math.min(TUNNEL_DURATION, time + 0.62));
+      const tangent = after.subtract(before);
+      tangent.y = 0;
+      return tangent.lengthSquared() > 0.00001
+        ? tangent.normalize()
+        : BABYLON.Axis.Z.clone();
     },
   };
 }
@@ -155,11 +170,28 @@ function sampleDistance(table, time) {
   return BABYLON.Scalar.Lerp(before.distance, after.distance, (time - before.time) / Math.max(after.time - before.time, 0.0001));
 }
 
-function applyPathPosition(root, position, start, inXr) {
-  const offset = position.subtract(start);
-  root.position.x = offset.x + (inXr ? start.x : 0);
-  root.position.y = offset.y;
-  root.position.z = offset.z + (inXr ? start.z : 0);
+function applyPathTransform(root, route, time, initialHeading, delta) {
+  const position = route.positionAtTime(time);
+  root.position.copyFrom(position);
+
+  // Only the locomotion body rotates. A WebXR camera remains free to receive
+  // its headset-local orientation, while the desktop camera naturally faces
+  // along the same body frame.
+  const desiredYaw = normalizeAngle(headingFrom(route.tangentAtTime(time)) - initialHeading);
+  const smoothing = 1 - Math.exp(-Math.max(0, delta) * 2.6);
+  root.rotation.y = lerpAngle(root.rotation.y, desiredYaw, smoothing);
+}
+
+function headingFrom(direction) {
+  return Math.atan2(direction.x, direction.z);
+}
+
+function lerpAngle(from, to, amount) {
+  return from + normalizeAngle(to - from) * amount;
+}
+
+function normalizeAngle(value) {
+  return Math.atan2(Math.sin(value), Math.cos(value));
 }
 
 function createDebugPanel() {
