@@ -1,7 +1,9 @@
 import { TUNNEL_DURATION, getTunnelDiameter, getTunnelLook } from "./tunnelConfig.js";
 
 const FLOOR_WIDTH_SEGMENTS = 8;
-const GRASS_FADE_DISTANCE = 16;
+// The entry route itself already supplies a long grassy approach. Inside the
+// actual tunnel, the local grass must be gone before tunnel time ~20 seconds.
+const GRASS_FADE_DISTANCE = 6;
 
 /**
  * Creates the interior walking surface independently from the tunnel shell.
@@ -45,10 +47,10 @@ function createGrassTransition(scene, route, material, entranceFloorHeight) {
   // Overlapping, wavy strips use the existing grass material. They avoid an
   // alpha-blended mask and leave no straight material boundary on Quest.
   const definitions = [
-    { start: 0, end: 5.4, side: 0, coverage: 0.93, seed: 1.1 },
-    { start: 2.8, end: 9.2, side: -0.3, coverage: 0.58, seed: 2.7 },
-    { start: 7.1, end: 13.1, side: 0.42, coverage: 0.34, seed: 4.4 },
-    { start: 11.3, end: GRASS_FADE_DISTANCE, side: -0.22, coverage: 0.16, seed: 6.2 },
+    { start: 0, end: 2.3, side: 0, coverage: 0.88, seed: 1.1 },
+    { start: 1.1, end: 4.1, side: -0.3, coverage: 0.52, seed: 2.7 },
+    { start: 3.0, end: 5.45, side: 0.42, coverage: 0.26, seed: 4.4 },
+    { start: 4.55, end: GRASS_FADE_DISTANCE, side: -0.22, coverage: 0.1, seed: 6.2 },
   ];
 
   return definitions.map((definition, index) => {

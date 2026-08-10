@@ -22,6 +22,7 @@ export function createIdyllTunnelTransition(scene, options) {
   let elapsed = 0;
   let xrCamera = null;
   let tunnelVisible = false;
+  let outsideGroundHidden = false;
   let previousFrameTime = performance.now();
   const initialHeading = headingFrom(options.initialForward);
 
@@ -49,6 +50,10 @@ export function createIdyllTunnelTransition(scene, options) {
         tunnelVisible = true;
       }
       applyPathTransform(root, route, tunnelTime, initialHeading, delta);
+      if (!outsideGroundHidden && route.hasReachedTunnelInterior(tunnelTime)) {
+        options.outsideGroundMeshes.forEach((mesh) => mesh.setEnabled(false));
+        outsideGroundHidden = true;
+      }
     }
     debug.update(elapsed, tunnelTime);
   });
@@ -136,6 +141,9 @@ function createTimedRoute(entryPoints, tunnelRoute) {
 
   return {
     positionAtTime,
+    hasReachedTunnelInterior(time) {
+      return sampleDistance(distanceTable, time) >= lengths[entryPoints.length - 1];
+    },
     tangentAtTime(time) {
       // A short future sample filters tiny spline detail without delaying the
       // turning response into a visible late rotation.
