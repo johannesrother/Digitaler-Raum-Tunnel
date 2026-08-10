@@ -16,16 +16,18 @@ async function startExperience() {
   engine.runRenderLoop(() => scene.render());
   setStatus(statusElement, "Idylle bereit. WebXR wird geprüft …");
 
-  await initializeWebXR({
+  const xr = await initializeWebXR({
     scene,
     enterVrButton,
     statusElement,
   });
+  scene.metadata.transition.attachWebXR(xr);
 
   window.addEventListener(
     "beforeunload",
     () => {
       removeResizeHandling();
+      scene.metadata.transition.dispose();
       scene.dispose();
       engine.dispose();
     },

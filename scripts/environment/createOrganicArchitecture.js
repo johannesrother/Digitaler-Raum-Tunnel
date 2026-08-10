@@ -25,6 +25,11 @@ export function createIvoryArchitecture(scene, materials, getGroundHeight) {
     shadowCasters: [portal, interior.floor, interior.fade],
     reflectors: [portal],
     tunnel: { portal, ...interior },
+    entrance: {
+      center: ENTRANCE_CENTER.clone(),
+      forward: axes.forward.clone(),
+      lateral: axes.lateral.clone(),
+    },
   };
 }
 
