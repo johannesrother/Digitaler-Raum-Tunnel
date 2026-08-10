@@ -1,5 +1,3 @@
-import { createOrganicBoulder } from "./geometry.js";
-
 /**
  * Curved mineral masses are generated as variable lofts. Their profile, depth
  * and thickness change over the span so no part reads as a stock tube or arch.
@@ -11,9 +9,6 @@ export function createOrganicArchitecture(scene, materials, getGroundHeight) {
   const tunnel = createIntegratedTunnel(scene, materials, getGroundHeight);
   shadowCasters.push(...tunnel.shadowCasters);
   vineAnchors.push(...tunnel.vineAnchors);
-
-  const banks = createBlendedMineralBanks(scene, materials, getGroundHeight);
-  shadowCasters.push(...banks);
 
   return { shadowCasters, vineAnchors };
 }
@@ -110,10 +105,10 @@ function createFlowingMineralLoft(scene, name, options) {
 }
 
 function createIntegratedTunnel(scene, materials, getGroundHeight) {
-  // The entrance deliberately sits at a true 90° rightward head turn, leaving
-  // the forward landscape open and calm at the start position.
-  const centerX = 17.2;
-  const centerZ = -10.2;
+  // The entrance is deliberately offset to the right edge of the opening view:
+  // present at arrival, but never competing with the calm forward landscape.
+  const centerX = 9.4;
+  const centerZ = -1.2;
   const shadowCasters = [];
   const vineAnchors = [];
 
@@ -140,8 +135,8 @@ function createIntegratedTunnel(scene, materials, getGroundHeight) {
 function createTunnelFacade(scene, centerX, centerZ, materials, getGroundHeight) {
   const spanSegments = 42;
   const depthSegments = 5;
-  const innerSpan = 9.1;
-  const innerHeight = 6.2;
+  const innerSpan = 6.4;
+  const innerHeight = 4.9;
   const depth = 3.1;
   const positions = [];
   const indices = [];
@@ -240,8 +235,8 @@ function createTunnelCavity(scene, centerX, centerZ, materials, getGroundHeight)
 
   for (let depthIndex = 0; depthIndex <= depthSegments; depthIndex += 1) {
     const progress = depthIndex / depthSegments;
-    const width = 4.45 - progress * 1.22 + Math.sin(progress * 4.1) * 0.16;
-    const height = 4.15 - progress * 1.05 + Math.sin(progress * 3.7) * 0.13;
+    const width = 3.18 - progress * 0.76 + Math.sin(progress * 4.1) * 0.16;
+    const height = 3.42 - progress * 0.78 + Math.sin(progress * 3.7) * 0.13;
     const centerY = getGroundHeight(centerX, centerZ + progress * 10.6) + 0.1 + progress * 0.18;
     const centerShift = Math.sin(progress * Math.PI * 1.2) * 0.44;
     const z = centerZ + progress * 10.6;
@@ -292,7 +287,7 @@ function createTunnelFloor(scene, centerX, centerZ, materials, getGroundHeight) 
       getGroundHeight(centerX, z) + 0.07 + progress * 0.1,
       z,
     );
-    const width = 3.7 - progress * 0.85;
+    const width = 2.8 - progress * 0.62;
     route.push({ center, width });
   }
 
@@ -316,25 +311,4 @@ function createTunnelFloor(scene, centerX, centerZ, materials, getGroundHeight) 
   floor.receiveShadows = true;
   floor.isPickable = false;
   return floor;
-}
-
-function createBlendedMineralBanks(scene, materials, getGroundHeight) {
-  const definitions = [
-    [-15.7, 2.2, 2.6, 1.65, 2.7, 551],
-    [-6.1, 5.2, 2.25, 1.42, 2.25, 552],
-    [23.1, -10.3, 3.45, 3.45, 3.2, 553],
-    [20.2, -1.6, 3.65, 3.3, 3.65, 554],
-    [-13.5, -14.8, 2.85, 2.15, 2.85, 555],
-    [12.6, -17.2, 2.8, 2.3, 2.75, 556],
-  ];
-
-  return definitions.map(([x, z, scaleX, scaleY, scaleZ, seed], index) =>
-    createOrganicBoulder(scene, `blended-mineral-bank-${index}`, {
-      position: new BABYLON.Vector3(x, getGroundHeight(x, z) + scaleY * 0.34, z),
-      scaling: new BABYLON.Vector3(scaleX, scaleY, scaleZ),
-      seed,
-      material: index % 2 === 0 ? materials.mineralWeathered : materials.mineral,
-      subdivisions: 6,
-    }),
-  );
 }

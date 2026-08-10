@@ -9,8 +9,9 @@ index.html                     Einstiegspunkt, Babylon.js-CDN und Canvas
 style.css                      Vollbild-Canvas und zurückhaltende Laufzeitsteuerung
 main.js                        Startet Engine, Idylle, Resize und WebXR
 assets/
-  models/                      Platz für spätere 3D-Modelle
-  textures/                    Platz für spätere Texturen
+  models/                      Lokale 1K-glTF-Felsen und Vegetation
+  textures/                    Lokale CC0-PBR-Texturen für Boden und Architektur
+  hdr/                         Lokales Golden-Hour-HDR für PBR-Beleuchtung
   audio/                       Platz für spätere Audiodateien
   videos/                      Platz für spätere Videodateien
 scripts/
@@ -24,7 +25,7 @@ scripts/
   utils/                       Kleine DOM-Helfer
 ```
 
-Die `.gitkeep`-Dateien halten leere, für spätere Inhalte vorgesehene Ordner in der Projektstruktur sichtbar.
+Die verwendeten Fremdassets und ihre Lizenzen sind in `ASSET_CREDITS.md` dokumentiert.
 
 ## Lokaler Test
 
@@ -52,14 +53,10 @@ Danach `http://localhost:8080` im Browser öffnen. Mit der Maus lässt sich die 
 
 ## Aktueller Umfang
 
-Die Idylle ist vollständig räumlich aufgebaut. Unter dem Besuchenden liegt ein verformtes Terrain auf natürlicher Stehhöhe mit Moosübergängen, mineralischen Felsformationen und flachen Wasserflächen. Ein unregelmäßiger Landschaftsring setzt das Gelände in allen Blickrichtungen fort und verdeckt seine technische Außenkante.
+Die Idylle ist vollständig räumlich aufgebaut. Unter dem Besuchenden liegt ein verformtes Terrain auf natürlicher Stehhöhe mit lokalen PBR-Bodenmaps, gescannten glTF-Felsen, Farnen, Moos, Gras und Sträuchern. Ein unregelmäßiger Landschaftsring setzt das Gelände in allen Blickrichtungen fort und verdeckt seine technische Außenkante.
 
-Die Vegetation besteht aus instanzierten, kleinen Blatt- und Halm-Meshes sowie gewachsenen Baum- und Rankenpfaden. Dadurch entstehen Vordergrund, Mittelgrund und Fernraum mit echter Tiefenstaffelung und Parallaxe. Rechts vom Startpunkt liegt ein tatsächlicher, vertiefter Tunneleingang aus einer dicken, unregelmäßigen Mineralfassade und einem modellierten Innenraum. Er bleibt ruhig und statisch; es gibt keine Tunnelreise.
+Die Vegetation verwendet wenige, mehrfach platzierte lokale glTF-Assets mit variierter Größe und Ausrichtung. Dadurch entstehen Vordergrund, Mittelgrund und Fernraum mit echter Tiefenstaffelung und Parallaxe. Rechts vom Startpunkt liegt ein tatsächlicher, vertiefter Tunneleingang aus einer dicken, unregelmäßigen Mineralfassade und einem modellierten Innenraum. Er bleibt ruhig und statisch; es gibt keine Tunnelreise.
 
 Die Moodboard-Bilder sind ausschließlich Art Direction und sind nicht als Bild, Hintergrund, Panorama, Skybox, Ebene oder Projektion im Projekt enthalten. Die offene Himmelsfarbe ist ein im Code erzeugter Farbverlauf, keine Bilddatei.
 
-Komplexe Echtzeitreflexionen, volumetrische Lichtstrahlen und aufwendiges Post-Processing sind zugunsten von Quest-2/3-tauglicher Laufzeit nicht enthalten.
-
-## Textur-Asset
-
-- `assets/textures/warm-mineral-v1.png`: neutrale, warme Kalkstein-/Feinsandstein-Oberfläche für mineralische 3D-Meshes. Sie ist kein Moodboard- oder Referenzbild.
+Das lokale HDR wird nur für Licht und PBR-Reflexionen verwendet; die sichtbare Himmelsfläche bleibt ein im Code erzeugter Verlauf. Die Wasserflächen nutzen eine kleine Babylon-WaterMaterial-Reflexion mit einer 256px Render-Textur. Aufwendige volumetrische Effekte und Post-Processing bleiben zugunsten von Quest-2/3-tauglicher Laufzeit ausgeschlossen.

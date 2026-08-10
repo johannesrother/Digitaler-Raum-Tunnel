@@ -1,28 +1,27 @@
 import { createGoldenHourLighting } from "../lighting/createGoldenHourLighting.js";
+import { createAssetLandscape } from "./createAssetLandscape.js";
 import { createOrganicArchitecture } from "./createOrganicArchitecture.js";
 import { createIdyllMaterials } from "./createIdyllMaterials.js";
 import { createTerrain } from "./createTerrain.js";
-import { createVegetation } from "./createVegetation.js";
 import { createWater } from "./createWater.js";
 
 /** Coordinates independent environment layers without coupling them to WebXR. */
-export function createIdyllEnvironment(scene) {
+export async function createIdyllEnvironment(scene) {
   const materials = createIdyllMaterials(scene);
   const lighting = createGoldenHourLighting(scene);
   const terrain = createTerrain(scene, materials);
   const architecture = createOrganicArchitecture(scene, materials, terrain.getGroundHeight);
   const water = createWater(scene, materials, terrain.getGroundHeight);
-  const vegetation = createVegetation(
+  const assets = await createAssetLandscape(
     scene,
-    materials,
     terrain.getGroundHeight,
-    architecture.vineAnchors,
   );
+  water.configureReflections([terrain.terrain, terrain.distantLandscape, ...architecture.shadowCasters, ...assets.reflectors]);
 
   lighting.addShadowCasters([
     ...terrain.shadowCasters,
     ...architecture.shadowCasters,
-    ...vegetation.shadowCasters,
+    ...assets.shadowCasters,
   ]);
   lighting.freeze();
 
@@ -31,6 +30,6 @@ export function createIdyllEnvironment(scene) {
     terrain,
     architecture,
     water,
-    vegetation,
+    assets,
   };
 }
