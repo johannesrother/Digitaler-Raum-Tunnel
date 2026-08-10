@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#17191d" />
+    <title>Digitaler Raum – Idylle</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="experience-shell">
+      <canvas id="renderCanvas" aria-label="Immersive Idylle"></canvas>
+
+      <section class="runtime-panel" aria-live="polite">
+        <p id="runtime-status">Idylle wird vorbereitet …</p>
+        <button id="enter-vr" type="button" hidden>VR betreten</button>
+      </section>
+    </main>
+
+    <noscript>
+      <p class="noscript-message">Für diese technische Testszene muss JavaScript aktiviert sein.</p>
+    </noscript>
+
+    <!-- Babylon.js is loaded directly from its CDN; no build process is required. -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
