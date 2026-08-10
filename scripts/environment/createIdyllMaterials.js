@@ -24,32 +24,62 @@ export function createIdyllMaterials(scene) {
     environmentIntensity: 0.18,
   });
 
-  const ivoryArchitecture = createIvoryMaterial(scene, "ivory-sculptural-architecture", "#f5d9ac");
+  const ivoryArchitecture = createIvoryArchitectureMaterial(scene, "ivory-sculptural-architecture", {
+    color: "#fff8ea",
+    tiling: 3.6,
+    environmentIntensity: 0.26,
+    roughness: 0.82,
+    normalStrength: 0.16,
+  });
   ivoryArchitecture.backFaceCulling = false;
 
   const ivoryInterior = ivoryArchitecture.clone("ivory-sculptural-interior");
-  ivoryInterior.albedoColor = BABYLON.Color3.FromHexString("#efd0a2");
+  ivoryInterior.albedoColor = BABYLON.Color3.FromHexString("#f5e1c3");
   ivoryInterior.environmentIntensity = 0.28;
   ivoryInterior.roughness = 0.87;
   ivoryInterior.emissiveColor = BABYLON.Color3.FromHexString("#3a2009");
 
   const ivoryInteriorFade = ivoryInterior.clone("ivory-threshold-light-fade");
-  ivoryInteriorFade.albedoColor = BABYLON.Color3.FromHexString("#d9b67f");
+  ivoryInteriorFade.albedoColor = BABYLON.Color3.FromHexString("#ead0a8");
   ivoryInteriorFade.environmentIntensity = 0.14;
   ivoryInteriorFade.emissiveColor = BABYLON.Color3.FromHexString("#211104");
 
   return { terrain, mixedGround, ivoryArchitecture, ivoryInterior, ivoryInteriorFade };
 }
 
-/** Matte warm mineral response, with shape variation supplied by the sculpture. */
-function createIvoryMaterial(scene, name, color) {
+/**
+ * Fine CC0 mineral maps add tactile detail while the warm albedo tint keeps
+ * the architecture in the ivory/cream range under the approved sunset light.
+ */
+function createIvoryArchitectureMaterial(scene, name, options) {
   const material = new BABYLON.PBRMaterial(name, scene);
-  material.albedoColor = BABYLON.Color3.FromHexString(color);
+  material.albedoTexture = createTexture(
+    scene,
+    "./assets/textures/architecture/ivory-mineral/ivory_mineral_1k_color.jpg",
+    options.tiling,
+    true,
+  );
+  material.bumpTexture = createTexture(
+    scene,
+    "./assets/textures/architecture/ivory-mineral/ivory_mineral_1k_normalgl.jpg",
+    options.tiling,
+    false,
+  );
+  material.bumpTexture.level = options.normalStrength;
+  material.metallicTexture = createTexture(
+    scene,
+    "./assets/textures/architecture/ivory-mineral/ivory_mineral_1k_roughness.jpg",
+    options.tiling,
+    false,
+  );
+  material.useRoughnessFromMetallicTextureGreen = true;
+  material.useMetallnessFromMetallicTextureBlue = false;
+  material.albedoColor = BABYLON.Color3.FromHexString(options.color);
   material.metallic = 0;
-  material.roughness = 0.78;
-  material.environmentIntensity = 0.32;
-  material.specularIntensity = 0.18;
-  material.emissiveColor = BABYLON.Color3.FromHexString("#211205");
+  material.roughness = options.roughness;
+  material.environmentIntensity = options.environmentIntensity;
+  material.specularIntensity = 0.14;
+  material.emissiveColor = BABYLON.Color3.FromHexString("#120802");
   material.backFaceCulling = false;
   return material;
 }
