@@ -39,12 +39,15 @@ export function createOrganicTunnel(scene, options) {
   let nextImpulseAt = 12.7;
   let impulse = 0;
   let activeTime = 0;
+  let sequenceActive = false;
   let previousFrameTime = performance.now();
   const observer = scene.onBeforeRenderObservable.add(() => {
     const frameTime = performance.now();
     const delta = Math.min((frameTime - previousFrameTime) / 1000, 0.04);
     previousFrameTime = frameTime;
-    activeTime = Math.min(activeTime + delta, TUNNEL_DURATION);
+    if (sequenceActive) {
+      activeTime = Math.min(activeTime + delta, TUNNEL_DURATION);
+    }
     updateTunnelLights(lights, activeTime, impulse);
     impulse = Math.max(0, impulse - delta * 2.9);
   });
@@ -63,6 +66,7 @@ export function createOrganicTunnel(scene, options) {
       lights.fill.setEnabled(enabled);
     },
     update(tunnelTime) {
+      sequenceActive = true;
       activeTime = BABYLON.Scalar.Clamp(tunnelTime, 0, TUNNEL_DURATION);
       const look = getTunnelLook(activeTime);
       if (activeTime >= nextImpulseAt) {
@@ -73,6 +77,14 @@ export function createOrganicTunnel(scene, options) {
         nextImpulseAt += interval > 0 ? interval * (0.72 + ((nextImpulseAt * 1.73) % 0.58)) : 9;
       }
       updateTunnelLights(lights, activeTime, impulse * (0.25 + look.detail * 0.75));
+    },
+    setSequenceActive(active) {
+      sequenceActive = active;
+      if (!active) {
+        activeTime = 0;
+        impulse = 0;
+        updateTunnelLights(lights, 0, 0);
+      }
     },
     dispose() {
       scene.onBeforeRenderObservable.remove(observer);

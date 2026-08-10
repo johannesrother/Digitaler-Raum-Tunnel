@@ -94,7 +94,7 @@ function animateAnchor(state, time, attraction) {
   const pulse = 0.68 + Math.sin(time * 0.075 + state.phase) * 0.2;
   const amount = state.amplitude * pulse;
 
-  const directionalLean = attraction * state.attractionWeight * (state.kind === "flower" ? 0.018 : 0.009);
+  const directionalLean = attraction * state.attractionWeight * (state.kind === "flower" ? 0.15 : 0.075);
   state.anchor.rotation.x = state.baseRotation.x + main * amount + state.attractionDirection.z * directionalLean;
   state.anchor.rotation.z = state.baseRotation.z + cross * amount * 0.75 - state.attractionDirection.x * directionalLean;
   // Flowers occasionally rise a fraction more during a small local gust,
@@ -108,7 +108,7 @@ function animateFernFrond(state, time, attraction) {
   const pulse = 0.58 + Math.sin(time * 0.065 + state.phase * 0.6) * 0.24;
   const amount = state.amplitude * pulse;
 
-  const directionalLean = attraction * state.attractionWeight * 0.014;
+  const directionalLean = attraction * state.attractionWeight * 0.11;
   state.node.rotation.x = state.baseRotation.x + main * amount + state.attractionDirection.z * directionalLean;
   state.node.rotation.z = state.baseRotation.z + cross * amount * 0.8 - state.attractionDirection.x * directionalLean;
 }

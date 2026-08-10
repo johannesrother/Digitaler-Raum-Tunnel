@@ -6,7 +6,11 @@ import {
 } from "./tunnelConfig.js";
 
 const PEACEFUL_DURATION = 14;
-const ATTRACTION_DURATION = 6;
+const SUCTION_START = 18;
+const TUNNEL_START = 20;
+const TUNNEL_END = TUNNEL_START + TUNNEL_DURATION;
+const FALL_DURATION = 1;
+const WHITE_ROOM_DURATION = 5;
 const ACCELERATION_DURATION = 1.6;
 
 /**
@@ -17,12 +21,13 @@ export function createIdyllTunnelTransition(scene, options) {
   const root = new BABYLON.TransformNode("idyll-to-tunnel-locomotion-root", scene);
   const start = options.startPosition.clone();
   const entry = createEntryPath(start, options.entrance, options.initialForward, options.tunnel.route.start);
-  const route = createTimedRoute(entry, options.tunnel.route);
+  const suctionRoute = createSuctionRoute(entry);
+  const tunnelRoute = createTunnelTravelRoute(options.tunnel.route);
   const debug = createDebugPanel();
   let elapsed = 0;
   let xrCamera = null;
-  let tunnelVisible = false;
   let outsideGroundHidden = false;
+  let whiteRoomFinished = false;
   let previousFrameTime = performance.now();
   const initialHeading = headingFrom(options.initialForward);
 
@@ -31,28 +36,41 @@ export function createIdyllTunnelTransition(scene, options) {
   root.position.copyFrom(start);
   options.desktopCamera.parent = root;
   options.desktopCamera.position.set(0, options.desktopCamera.position.y - start.y, 0);
-  options.tunnel.setEnabled(false);
+  // The tunnel and its first visible section belong to the idyll from frame
+  // one. Only its time-based behaviour waits for the actual entry.
+  options.entranceFade.setEnabled(false);
+  options.tunnel.setEnabled(true);
+  options.tunnel.setSequenceActive(false);
 
   const observer = scene.onBeforeRenderObservable.add(() => {
     const frameTime = performance.now();
     const delta = Math.min((frameTime - previousFrameTime) / 1000, 0.04);
     previousFrameTime = frameTime;
     elapsed += delta;
-    const tunnelTime = BABYLON.Scalar.Clamp(elapsed - PEACEFUL_DURATION - ATTRACTION_DURATION, 0, TUNNEL_DURATION);
-
     options.breeze.setAttraction(attractionAmount(elapsed));
-    options.tunnel.update(tunnelTime);
+    options.suctionDebris.update(elapsed);
+    let tunnelTime = 0;
 
-    if (elapsed >= PEACEFUL_DURATION + ATTRACTION_DURATION) {
-      if (!tunnelVisible) {
-        options.entranceFade.setEnabled(false);
-        options.tunnel.setEnabled(true);
-        tunnelVisible = true;
-      }
-      applyPathTransform(root, route, tunnelTime, initialHeading, delta);
-      if (!outsideGroundHidden && route.hasReachedTunnelInterior(tunnelTime)) {
+    if (elapsed >= SUCTION_START && elapsed < TUNNEL_START) {
+      applyPathTransform(root, suctionRoute, suctionProgress(elapsed), initialHeading, delta);
+    } else if (elapsed >= TUNNEL_START && elapsed < TUNNEL_END) {
+      tunnelTime = elapsed - TUNNEL_START;
+      options.tunnel.update(tunnelTime);
+      applyPathTransform(root, tunnelRoute, tunnelTime, initialHeading, delta);
+      // Keep the idyll readable behind the visitor immediately after crossing
+      // the threshold, then remove its large ground surfaces before they can
+      // intrude into the deeper tunnel volume.
+      if (!outsideGroundHidden && tunnelTime >= 6) {
         options.outsideGroundMeshes.forEach((mesh) => mesh.setEnabled(false));
         outsideGroundHidden = true;
+      }
+    } else if (elapsed >= TUNNEL_END) {
+      activateWhiteRoom(options, root);
+      const fall = controlledFall((elapsed - TUNNEL_END) / FALL_DURATION);
+      root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, options.whiteRoom.finalPosition, fall));
+      if (!whiteRoomFinished && elapsed >= TUNNEL_END + WHITE_ROOM_DURATION) {
+        options.whiteRoomTone.deactivate();
+        whiteRoomFinished = true;
       }
     }
     debug.update(elapsed, tunnelTime);
@@ -68,14 +86,14 @@ export function createIdyllTunnelTransition(scene, options) {
         if (isInXr) {
           xrCamera = xr.baseExperience.camera;
           xrCamera.parent = root;
-          applyPathTransform(root, route, Math.max(0, elapsed - 20), initialHeading, 0);
+          syncRootToExperienceTime(root, elapsed, suctionRoute, tunnelRoute, options.whiteRoom, initialHeading);
           return;
         }
         if (xrCamera) {
           xrCamera.parent = null;
           xrCamera = null;
         }
-        applyPathTransform(root, route, Math.max(0, elapsed - 20), initialHeading, 0);
+        syncRootToExperienceTime(root, elapsed, suctionRoute, tunnelRoute, options.whiteRoom, initialHeading);
       });
     },
     dispose() {
@@ -94,10 +112,20 @@ function attractionAmount(time) {
   if (time <= PEACEFUL_DURATION) {
     return 0;
   }
-  if (time < PEACEFUL_DURATION + 3) {
-    return smoothstep((time - PEACEFUL_DURATION) / 3) * 0.35;
+  if (time < SUCTION_START) {
+    return smoothstep((time - PEACEFUL_DURATION) / (SUCTION_START - PEACEFUL_DURATION)) * 0.28;
   }
-  return BABYLON.Scalar.Lerp(0.35, 1, smoothstep((time - PEACEFUL_DURATION - 3) / 3));
+  if (time < TUNNEL_START) {
+    return BABYLON.Scalar.Lerp(0.28, 1, smoothstep((time - SUCTION_START) / (TUNNEL_START - SUCTION_START)));
+  }
+  return 0;
+}
+
+function suctionProgress(time) {
+  const amount = BABYLON.Scalar.Clamp((time - SUCTION_START) / (TUNNEL_START - SUCTION_START), 0, 1);
+  // The route remains continuous, but most of its distance is covered in the
+  // final moments to make the pull unmistakable without a teleport.
+  return Math.pow(amount, 3.15);
 }
 
 function createEntryPath(start, entrance, initialForward, finish) {
@@ -113,23 +141,31 @@ function createEntryPath(start, entrance, initialForward, finish) {
   return points;
 }
 
-function createTimedRoute(entryPoints, tunnelRoute) {
-  const points = [...entryPoints];
-  for (let index = 1; index <= 188; index += 1) {
+function createSuctionRoute(points) {
+  return createPolylineRoute(points, 1);
+}
+
+function createTunnelTravelRoute(tunnelRoute) {
+  const points = [];
+  for (let index = 0; index <= 188; index += 1) {
     // The cap stays just ahead of the final ascent endpoint; the visitor can
     // never cross it or leave the visible tunnel volume.
     points.push(tunnelRoute.positionAt(index / 188 * 0.986));
   }
+  return createPolylineRoute(points, TUNNEL_DURATION, createDistanceTable);
+}
+
+function createPolylineRoute(points, duration, distanceTableFactory = null) {
   const lengths = [0];
   for (let index = 1; index < points.length; index += 1) {
     lengths.push(lengths[index - 1] + BABYLON.Vector3.Distance(points[index - 1], points[index]));
   }
   const totalLength = lengths.at(-1);
-  const distanceTable = createDistanceTable(totalLength);
+  const distanceTable = distanceTableFactory ? distanceTableFactory(totalLength) : null;
 
-  const positionAtTime = (time) => {
-    const clamped = BABYLON.Scalar.Clamp(time, 0, TUNNEL_DURATION);
-    const distance = sampleDistance(distanceTable, clamped);
+  const positionAt = (time) => {
+    const clamped = BABYLON.Scalar.Clamp(time, 0, duration);
+    const distance = distanceTable ? sampleDistance(distanceTable, clamped) : clamped * totalLength;
     const next = lengths.findIndex((length) => length >= distance);
     if (next <= 0) {
       return points[0].clone();
@@ -140,15 +176,15 @@ function createTimedRoute(entryPoints, tunnelRoute) {
   };
 
   return {
-    positionAtTime,
-    hasReachedTunnelInterior(time) {
-      return sampleDistance(distanceTable, time) >= lengths[entryPoints.length - 1];
-    },
-    tangentAtTime(time) {
+    endPosition: points.at(-1).clone(),
+    positionAt,
+    tangentAt(time) {
       // A short future sample filters tiny spline detail without delaying the
       // turning response into a visible late rotation.
-      const before = positionAtTime(Math.max(0, time - 0.18));
-      const after = positionAtTime(Math.min(TUNNEL_DURATION, time + 0.62));
+      const lookAhead = duration === 1 ? 0.035 : 0.62;
+      const lookBehind = duration === 1 ? 0.012 : 0.18;
+      const before = positionAt(Math.max(0, time - lookBehind));
+      const after = positionAt(Math.min(duration, time + lookAhead));
       const tangent = after.subtract(before);
       tangent.y = 0;
       return tangent.lengthSquared() > 0.00001
@@ -179,15 +215,48 @@ function sampleDistance(table, time) {
 }
 
 function applyPathTransform(root, route, time, initialHeading, delta) {
-  const position = route.positionAtTime(time);
+  const position = route.positionAt(time);
   root.position.copyFrom(position);
 
   // Only the locomotion body rotates. A WebXR camera remains free to receive
   // its headset-local orientation, while the desktop camera naturally faces
   // along the same body frame.
-  const desiredYaw = normalizeAngle(headingFrom(route.tangentAtTime(time)) - initialHeading);
+  const desiredYaw = normalizeAngle(headingFrom(route.tangentAt(time)) - initialHeading);
   const smoothing = 1 - Math.exp(-Math.max(0, delta) * 2.6);
   root.rotation.y = lerpAngle(root.rotation.y, desiredYaw, smoothing);
+}
+
+function activateWhiteRoom(options, root) {
+  if (options.whiteRoomActive) {
+    return;
+  }
+  options.whiteRoomActive = true;
+  options.tunnel.setEnabled(false);
+  options.tunnel.setSequenceActive(false);
+  options.whiteRoom.activate();
+  options.whiteRoomTone.activate();
+  root.rotation.x = 0;
+  root.rotation.z = 0;
+}
+
+function controlledFall(amount) {
+  const clamped = BABYLON.Scalar.Clamp(amount, 0, 1);
+  return clamped * clamped * (3 - 2 * clamped);
+}
+
+function syncRootToExperienceTime(root, elapsed, suctionRoute, tunnelRoute, whiteRoom, initialHeading) {
+  if (elapsed < SUCTION_START) {
+    return;
+  }
+  if (elapsed < TUNNEL_START) {
+    applyPathTransform(root, suctionRoute, suctionProgress(elapsed), initialHeading, 0);
+    return;
+  }
+  if (elapsed < TUNNEL_END) {
+    applyPathTransform(root, tunnelRoute, elapsed - TUNNEL_START, initialHeading, 0);
+    return;
+  }
+  root.position.copyFrom(whiteRoom.finalPosition);
 }
 
 function headingFrom(direction) {
