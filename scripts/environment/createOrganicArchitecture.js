@@ -10,7 +10,10 @@ export function createOrganicArchitecture(scene, materials, getGroundHeight) {
   shadowCasters.push(...tunnel.shadowCasters);
   vineAnchors.push(...tunnel.vineAnchors);
 
-  return { shadowCasters, vineAnchors };
+  const sculptural = createSculpturalArchitecture(scene, materials, getGroundHeight);
+  shadowCasters.push(...sculptural.shadowCasters);
+
+  return { shadowCasters, vineAnchors, sculptural };
 }
 
 function createFlowingMineralLoft(scene, name, options) {
@@ -312,3 +315,4 @@ function createTunnelFloor(scene, centerX, centerZ, materials, getGroundHeight) 
   floor.isPickable = false;
   return floor;
 }
+import { createSculpturalArchitecture } from "./createSculpturalArchitecture.js";

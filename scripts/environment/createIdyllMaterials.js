@@ -12,13 +12,13 @@ export function createIdyllMaterials(scene) {
   });
 
   const mineral = createPbrMaterial(scene, "mossy-stone-pbr", {
-    base: "./assets/textures/stone/aerial_grass_rock/aerial_grass_rock_diff_1k.jpg",
-    normal: "./assets/textures/stone/aerial_grass_rock/aerial_grass_rock_nor_gl_1k.jpg",
-    roughness: "./assets/textures/stone/aerial_grass_rock/aerial_grass_rock_rough_1k.jpg",
-    ambient: "./assets/textures/stone/aerial_grass_rock/aerial_grass_rock_ao_1k.jpg",
-    color: "#f1ddc1",
-    roughnessValue: 0.85,
-    tiling: 1.8,
+    base: "./assets/textures/stone/white_plaster_rough_01/white_plaster_rough_01_diff_1k.jpg",
+    normal: "./assets/textures/stone/white_plaster_rough_01/white_plaster_rough_01_nor_gl_1k.jpg",
+    roughness: "./assets/textures/stone/white_plaster_rough_01/white_plaster_rough_01_rough_1k.jpg",
+    ambient: "./assets/textures/stone/white_plaster_rough_01/white_plaster_rough_01_ao_1k.jpg",
+    color: "#e8d8bb",
+    roughnessValue: 0.9,
+    tiling: 1.25,
     environmentIntensity: 0.38,
   });
   mineral.backFaceCulling = false;

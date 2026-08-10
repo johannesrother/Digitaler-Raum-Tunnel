@@ -53,9 +53,9 @@ Danach `http://localhost:8080` im Browser öffnen. Mit der Maus lässt sich die 
 
 ## Aktueller Umfang
 
-Die Idylle ist vollständig räumlich aufgebaut. Unter dem Besuchenden liegt ein verformtes Terrain auf natürlicher Stehhöhe mit lokalen PBR-Bodenmaps, gescannten glTF-Felsen, Farnen, Moos, Gras und Sträuchern. Ein unregelmäßiger Landschaftsring setzt das Gelände in allen Blickrichtungen fort und verdeckt seine technische Außenkante.
+Die Idylle ist vollständig räumlich aufgebaut. Unter dem Besuchenden liegt ein verformtes Terrain auf natürlicher Stehhöhe mit lokalen PBR-Bodenmaps, gescannten glTF-Felsen, Farnen, Moos, zwei Grassorten, Blumen, Sträuchern und einzelnen Baum-Silhouetten. Ein unregelmäßiger Landschaftsring und echte Felsmassen setzen das Gelände in allen Blickrichtungen fort und verdecken seine technische Außenkante.
 
-Die Vegetation verwendet wenige, mehrfach platzierte lokale glTF-Assets mit variierter Größe und Ausrichtung. Dadurch entstehen Vordergrund, Mittelgrund und Fernraum mit echter Tiefenstaffelung und Parallaxe. Rechts vom Startpunkt liegt ein tatsächlicher, vertiefter Tunneleingang aus einer dicken, unregelmäßigen Mineralfassade und einem modellierten Innenraum. Er bleibt ruhig und statisch; es gibt keine Tunnelreise.
+Die Vegetation verwendet lokale glTF-Assets mit variierter Größe, Ausrichtung und räumlichen Schichten. Zusätzliche modellierte Mineralribbons verbinden Terrain, Architektur und sichtbare Hängevegetation zu großen, durchgehenden Formen. Dadurch entstehen Vordergrund, Mittelgrund und Fernraum mit echter Tiefenstaffelung und Parallaxe. Rechts vom Startpunkt liegt ein tatsächlicher, vertiefter Tunneleingang aus einer dicken, unregelmäßigen Mineralfassade und einem modellierten Innenraum. Er bleibt ruhig und statisch; es gibt keine Tunnelreise.
 
 Die Moodboard-Bilder sind ausschließlich Art Direction und sind nicht als Bild, Hintergrund, Panorama, Skybox, Ebene oder Projektion im Projekt enthalten. Die offene Himmelsfarbe ist ein im Code erzeugter Farbverlauf, keine Bilddatei.
 
