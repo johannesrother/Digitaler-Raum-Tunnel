@@ -1,9 +1,11 @@
+import { createSeededRandom, randomRange } from "./random.js";
+
 const TERRAIN_SIZE = 92;
 const START_POSITION = new BABYLON.Vector3(0, 0, -5.5);
 
 /**
- * One continuous landscape sits under every view direction. The calm arrival
- * area remains at y = 0 while a quiet outer rise hides the mesh edge.
+ * A continuous, gently shaped landscape. Its outer rise naturally meets the
+ * horizon, so the former visible procedural ridge is no longer required.
  */
 export function createTerrain(scene, materials) {
   const terrain = BABYLON.MeshBuilder.CreateGround(
@@ -26,72 +28,142 @@ export function createTerrain(scene, materials) {
   terrain.receiveShadows = true;
   terrain.isPickable = false;
 
-  const distantLandscape = createDistantLandscapeRing(scene, materials);
+  const groundCoverZones = createGroundCoverZones(scene, materials.mixedGround);
+  const distantHorizon = createDistantHorizon(scene, materials.terrain);
 
   return {
     terrain,
+    groundCoverZones,
+    distantHorizon,
     startPosition: START_POSITION.clone(),
-    getGroundHeight: getLandscapeHeight,
+    getGroundHeight: getTerrainHeight,
     shadowCasters: [],
-    distantLandscape,
   };
 }
 
 /**
- * An irregular, fully geometric outer rise closes the horizon in every direction.
- * It joins the terrain at ground level instead of acting as a circular backdrop.
+ * A quiet extension of the existing terrain softens the map edge into distant,
+ * low landscape forms. It remains intentionally understated behind the kit
+ * vegetation and leaves the right-side composition open.
  */
-function createDistantLandscapeRing(scene, materials) {
-  const angularSegments = 88;
-  const radialSegments = 5;
-  const profile = [0, 0.32, 0.84, 1, 0.72, 0.28];
-  const crest = Array.from({ length: angularSegments }, (_, index) => {
-    const angle = (index / angularSegments) * Math.PI * 2;
-    return 4.3 + Math.sin(angle * 3.2 + 0.5) * 1.05 + Math.sin(angle * 7.1 - 0.8) * 0.55;
-  });
+function createDistantHorizon(scene, terrainMaterial) {
+  const angularSegments = 72;
+  const radii = [44, 64, 92, 128];
+  const profiles = [0.5, 0.9, 1.45, 2.05];
   const positions = [];
   const indices = [];
   const uvs = [];
 
-  for (let radialIndex = 0; radialIndex <= radialSegments; radialIndex += 1) {
-    const radialProgress = radialIndex / radialSegments;
+  for (let row = 0; row < radii.length; row += 1) {
     for (let sector = 0; sector < angularSegments; sector += 1) {
       const angle = (sector / angularSegments) * Math.PI * 2;
-      const asymmetricRadius = 20 + radialProgress * 17 + Math.sin(angle * 4 + radialIndex) * 0.7;
-      const x = Math.cos(angle) * asymmetricRadius;
-      const z = Math.sin(angle) * asymmetricRadius - 1.5;
-      const neighbour = crest[(sector + 1) % angularSegments];
-      const ridgeHeight = (crest[sector] * 0.72 + neighbour * 0.28) * profile[radialIndex];
-      const shoulderDetail = Math.sin(angle * 11 + radialProgress * 4.6) * 0.22 * profile[radialIndex];
-      positions.push(x, getTerrainHeight(x, z) + ridgeHeight + shoulderDetail, z);
-      uvs.push((sector / angularSegments) * 5, radialProgress * 2);
+      const radius = radii[row] + Math.sin(angle * 4.3 + row) * 0.9;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius - 1.5;
+      const silhouette =
+        Math.sin(angle * 2.1 + 0.6) * 0.58 +
+        Math.sin(angle * 5.2 - 1.3) * 0.26;
+      // This is a controlled far silhouette, rather than an extension of the
+      // near terrain's rising edge. Its low cap preserves an open sky in every
+      // direction while visually absorbing the map boundary.
+      positions.push(x, profiles[row] + silhouette * (row / 3), z);
+      uvs.push((sector / angularSegments) * 7, row * 1.2);
     }
   }
 
-  for (let radialIndex = 0; radialIndex < radialSegments; radialIndex += 1) {
+  for (let row = 0; row < radii.length - 1; row += 1) {
     for (let sector = 0; sector < angularSegments; sector += 1) {
-      const nextSector = (sector + 1) % angularSegments;
-      const current = radialIndex * angularSegments + sector;
+      const next = (sector + 1) % angularSegments;
+      const current = row * angularSegments + sector;
       const nextRow = current + angularSegments;
-      const currentNext = radialIndex * angularSegments + nextSector;
-      const nextRowNext = nextRow - sector + nextSector;
+      const currentNext = row * angularSegments + next;
+      const nextRowNext = nextRow - sector + next;
       indices.push(current, nextRow, nextRowNext, current, nextRowNext, currentNext);
     }
   }
 
   const normals = [];
   BABYLON.VertexData.ComputeNormals(positions, indices, normals);
-  const landscape = new BABYLON.Mesh("continuous-distant-landscape", scene);
+  const horizon = new BABYLON.Mesh("quiet-distant-horizon", scene);
   const vertexData = new BABYLON.VertexData();
   vertexData.positions = positions;
   vertexData.indices = indices;
   vertexData.normals = normals;
   vertexData.uvs = uvs;
-  vertexData.applyToMesh(landscape);
-  landscape.material = materials.terrain;
-  landscape.receiveShadows = true;
-  landscape.isPickable = false;
-  return landscape;
+  vertexData.applyToMesh(horizon);
+  const horizonMaterial = terrainMaterial.clone("quiet-distant-horizon-material");
+  horizonMaterial.albedoColor = BABYLON.Color3.FromHexString("#9cae9b");
+  horizonMaterial.environmentIntensity = 0.04;
+  horizonMaterial.specularIntensity = 0;
+  horizonMaterial.roughness = 0.99;
+  horizon.material = horizonMaterial;
+  horizon.isPickable = false;
+  return horizon;
+}
+
+/**
+ * Small, terrain-conforming mixed-ground zones break up the grass material
+ * around the water without creating tiled paths or decorative placeholders.
+ */
+function createGroundCoverZones(scene, material) {
+  const definitions = [
+    { x: -6.7, z: -0.9, radiusX: 2.15, radiusZ: 8.6, seed: 801 },
+    { x: -2.6, z: -7.8, radiusX: 3.8, radiusZ: 1.5, seed: 802 },
+    { x: -8.7, z: 6.5, radiusX: 3.7, radiusZ: 2.1, seed: 803 },
+  ];
+
+  return definitions.map((definition, index) => {
+    const patch = createTerrainConformingPatch(
+      scene,
+      `mixed-ground-zone-${index}`,
+      definition,
+    );
+    patch.material = material;
+    patch.receiveShadows = true;
+    patch.isPickable = false;
+    return patch;
+  });
+}
+
+function createTerrainConformingPatch(scene, name, definition) {
+  const segments = 52;
+  const random = createSeededRandom(definition.seed);
+  const positions = [
+    definition.x,
+    getTerrainHeight(definition.x, definition.z) + 0.018,
+    definition.z,
+  ];
+  const uvs = [0.5, 0.5];
+  const indices = [];
+
+  for (let index = 0; index < segments; index += 1) {
+    const angle = (index / segments) * Math.PI * 2;
+    const variation =
+      1 +
+      Math.sin(angle * 3 + definition.seed) * 0.13 +
+      Math.sin(angle * 7 - definition.seed) * 0.06 +
+      randomRange(random, -0.05, 0.05);
+    const x = definition.x + Math.cos(angle) * definition.radiusX * variation;
+    const z = definition.z + Math.sin(angle) * definition.radiusZ * variation;
+    positions.push(x, getTerrainHeight(x, z) + 0.02, z);
+    uvs.push((Math.cos(angle) + 1) * 0.5, (Math.sin(angle) + 1) * 0.5);
+  }
+
+  for (let index = 0; index < segments; index += 1) {
+    const next = (index + 1) % segments;
+    indices.push(0, index + 1, next + 1);
+  }
+
+  const normals = [];
+  BABYLON.VertexData.ComputeNormals(positions, indices, normals);
+  const mesh = new BABYLON.Mesh(name, scene);
+  const vertexData = new BABYLON.VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = normals;
+  vertexData.uvs = uvs;
+  vertexData.applyToMesh(mesh);
+  return mesh;
 }
 
 export function getTerrainHeight(x, z) {
@@ -107,8 +179,4 @@ export function getTerrainHeight(x, z) {
   const arrivalBlend = Math.min(1, Math.max(0, (arrivalDistance - 2.8) / 7.2));
 
   return (broadMounds + fineVariation + shallowBasin) * arrivalBlend + outerRise;
-}
-
-function getLandscapeHeight(x, z) {
-  return getTerrainHeight(x, z);
 }

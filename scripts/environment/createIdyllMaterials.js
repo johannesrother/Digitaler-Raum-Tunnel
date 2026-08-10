@@ -1,39 +1,50 @@
-/** Shared PBR materials use local, CC0 texture maps rather than painted placeholders. */
+/**
+ * Shared PBR ground materials from the approved Idyll Asset Kit V1.
+ * The large terrain uses grass; small irregular bank zones use mixed ground.
+ */
 export function createIdyllMaterials(scene) {
-  const terrain = createPbrMaterial(scene, "forest-ground-pbr", {
-    base: "./assets/textures/ground/forest_ground_05/forest_ground_05_diff_1k.jpg",
-    normal: "./assets/textures/ground/forest_ground_05/forest_ground_05_nor_gl_1k.jpg",
-    roughness: "./assets/textures/ground/forest_ground_05/forest_ground_05_rough_1k.jpg",
-    ambient: "./assets/textures/ground/forest_ground_05/forest_ground_05_ao_1k.jpg",
-    color: "#bac290",
-    roughnessValue: 0.91,
-    tiling: 7.5,
-    environmentIntensity: 0.3,
+  const terrain = createPbrMaterial(scene, "kit-grass-ground-pbr", {
+    base: "./assets/textures/ground/grass001/Grass001_1K-JPG_Color.jpg",
+    normal: "./assets/textures/ground/grass001/Grass001_1K-JPG_NormalGL.jpg",
+    roughness: "./assets/textures/ground/grass001/Grass001_1K-JPG_Roughness.jpg",
+    ambient: "./assets/textures/ground/grass001/Grass001_1K-JPG_AmbientOcclusion.jpg",
+    color: "#d4e0b8",
+    roughnessValue: 0.92,
+    tiling: 8,
+    environmentIntensity: 0.22,
   });
 
-  const mineral = createPbrMaterial(scene, "mossy-stone-pbr", {
-    base: "./assets/textures/stone/white_plaster_rough_01/white_plaster_rough_01_diff_1k.jpg",
-    normal: "./assets/textures/stone/white_plaster_rough_01/white_plaster_rough_01_nor_gl_1k.jpg",
-    roughness: "./assets/textures/stone/white_plaster_rough_01/white_plaster_rough_01_rough_1k.jpg",
-    ambient: "./assets/textures/stone/white_plaster_rough_01/white_plaster_rough_01_ao_1k.jpg",
-    color: "#e8d8bb",
-    roughnessValue: 0.9,
-    tiling: 1.25,
-    environmentIntensity: 0.38,
+  const mixedGround = createPbrMaterial(scene, "kit-mixed-ground-pbr", {
+    base: "./assets/textures/ground/ground003/Ground003_1K-JPG_Color.jpg",
+    normal: "./assets/textures/ground/ground003/Ground003_1K-JPG_NormalGL.jpg",
+    roughness: "./assets/textures/ground/ground003/Ground003_1K-JPG_Roughness.jpg",
+    color: "#d8cfab",
+    roughnessValue: 0.95,
+    tiling: 1.9,
+    environmentIntensity: 0.18,
   });
-  mineral.backFaceCulling = false;
 
-  const mineralWeathered = mineral.clone("mossy-stone-weathered");
-  mineralWeathered.albedoColor = BABYLON.Color3.FromHexString("#cfc3a7");
-  mineralWeathered.roughness = 0.94;
+  const ivoryArchitecture = createIvoryMaterial(scene, "ivory-sculptural-architecture", "#eadcc5");
+  ivoryArchitecture.backFaceCulling = false;
 
-  const mineralInterior = mineral.clone("warm-mineral-interior");
-  mineralInterior.albedoColor = BABYLON.Color3.FromHexString("#776d5d");
-  mineralInterior.environmentIntensity = 0.13;
-  mineralInterior.roughness = 0.98;
-  mineralInterior.backFaceCulling = false;
+  const ivoryInterior = ivoryArchitecture.clone("ivory-sculptural-interior");
+  ivoryInterior.albedoColor = BABYLON.Color3.FromHexString("#d9cbb8");
+  ivoryInterior.environmentIntensity = 0.24;
+  ivoryInterior.roughness = 0.9;
 
-  return { terrain, mineral, mineralWeathered, mineralInterior };
+  return { terrain, mixedGround, ivoryArchitecture, ivoryInterior };
+}
+
+/** Matte warm mineral response, deliberately free of a noisy rock texture. */
+function createIvoryMaterial(scene, name, color) {
+  const material = new BABYLON.PBRMaterial(name, scene);
+  material.albedoColor = BABYLON.Color3.FromHexString(color);
+  material.metallic = 0;
+  material.roughness = 0.83;
+  material.environmentIntensity = 0.4;
+  material.specularIntensity = 0.22;
+  material.backFaceCulling = false;
+  return material;
 }
 
 function createPbrMaterial(scene, name, options) {
@@ -43,13 +54,17 @@ function createPbrMaterial(scene, name, options) {
   material.metallicTexture = createTexture(scene, options.roughness, options.tiling, false);
   material.useRoughnessFromMetallicTextureGreen = true;
   material.useMetallnessFromMetallicTextureBlue = false;
-  material.ambientTexture = createTexture(scene, options.ambient, options.tiling, false);
-  material.useAmbientInGrayScale = true;
   material.albedoColor = BABYLON.Color3.FromHexString(options.color);
   material.metallic = 0;
   material.roughness = options.roughnessValue;
   material.environmentIntensity = options.environmentIntensity;
-  material.specularIntensity = 0.26;
+  material.specularIntensity = 0.2;
+
+  if (options.ambient) {
+    material.ambientTexture = createTexture(scene, options.ambient, options.tiling, false);
+    material.useAmbientInGrayScale = true;
+  }
+
   return material;
 }
 

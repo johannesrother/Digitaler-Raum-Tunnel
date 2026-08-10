@@ -1,6 +1,7 @@
 import { createGoldenHourLighting } from "../lighting/createGoldenHourLighting.js";
-import { createAssetLandscape } from "./createAssetLandscape.js";
-import { createOrganicArchitecture } from "./createOrganicArchitecture.js";
+import { createNaturalFoundationAssets } from "./createAssetLandscape.js";
+import { createBreeze } from "./createBreeze.js";
+import { createIvoryArchitecture } from "./createOrganicArchitecture.js";
 import { createIdyllMaterials } from "./createIdyllMaterials.js";
 import { createTerrain } from "./createTerrain.js";
 import { createWater } from "./createWater.js";
@@ -10,26 +11,35 @@ export async function createIdyllEnvironment(scene) {
   const materials = createIdyllMaterials(scene);
   const lighting = createGoldenHourLighting(scene);
   const terrain = createTerrain(scene, materials);
-  const architecture = createOrganicArchitecture(scene, materials, terrain.getGroundHeight);
   const water = createWater(scene, materials, terrain.getGroundHeight);
-  const assets = await createAssetLandscape(
+  const assets = await createNaturalFoundationAssets(
     scene,
     terrain.getGroundHeight,
   );
-  water.configureReflections([terrain.terrain, terrain.distantLandscape, ...architecture.shadowCasters, ...assets.reflectors]);
+  const architecture = createIvoryArchitecture(scene, materials, terrain.getGroundHeight);
+  const breeze = createBreeze(scene, assets.placed);
+  water.configureReflections([
+    lighting.sky,
+    terrain.terrain,
+    terrain.distantHorizon,
+    ...terrain.groundCoverZones,
+    ...assets.reflectors,
+    ...architecture.reflectors,
+  ]);
 
   lighting.addShadowCasters([
     ...terrain.shadowCasters,
-    ...architecture.shadowCasters,
     ...assets.shadowCasters,
+    ...architecture.shadowCasters,
   ]);
   lighting.freeze();
 
   return {
     startPosition: terrain.startPosition,
     terrain,
-    architecture,
     water,
     assets,
+    architecture,
+    breeze,
   };
 }

@@ -11,10 +11,9 @@ export function createDesktopCamera(scene, canvas, standingPosition = BABYLON.Ve
     scene,
   );
 
-  // The visitor begins still and can only look around at this stage.
-  // The forward view remains a landscape, while the tunnel mouth is already
-  // legible at the right edge instead of requiring a full 90-degree turn.
-  camera.setTarget(new BABYLON.Vector3(5, STANDING_EYE_HEIGHT, 2));
+  // The visitor begins still and faces the Step-1 natural foundation. The
+  // deliberately open positive-x side remains reserved for a later tunnel.
+  camera.setTarget(new BABYLON.Vector3(-5.5, STANDING_EYE_HEIGHT, 2.5));
   camera.minZ = 0.1;
   camera.angularSensibility = 4000;
   camera.inputs.removeByType("FreeCameraKeyboardMoveInput");

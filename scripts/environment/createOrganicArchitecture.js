@@ -1,259 +1,134 @@
+const ENTRANCE_CENTER = new BABYLON.Vector3(9.3, 0, 2.45);
+const VIEWER_POSITION = new BABYLON.Vector3(0, 0, -5.5);
+
 /**
- * Curved mineral masses are generated as variable lofts. Their profile, depth
- * and thickness change over the span so no part reads as a stock tube or arch.
+ * A single continuous ivory shell forms the Step-4 focal point. It is aligned
+ * toward the visitor, so the opening reads as enterable from the rightward
+ * glance rather than as a freestanding arch in the landscape.
  */
-export function createOrganicArchitecture(scene, materials, getGroundHeight) {
-  const shadowCasters = [];
-  const vineAnchors = [];
+export function createIvoryArchitecture(scene, materials, getGroundHeight) {
+  const axes = createEntranceAxes();
+  const portal = createOrganicPortalShell(scene, materials.ivoryArchitecture, getGroundHeight, axes);
+  const interior = createInvitingEntranceInterior(scene, materials.ivoryInterior, getGroundHeight, axes);
 
-  const tunnel = createIntegratedTunnel(scene, materials, getGroundHeight);
-  shadowCasters.push(...tunnel.shadowCasters);
-  vineAnchors.push(...tunnel.vineAnchors);
-
-  const sculptural = createSculpturalArchitecture(scene, materials, getGroundHeight);
-  shadowCasters.push(...sculptural.shadowCasters);
-
-  return { shadowCasters, vineAnchors, sculptural };
+  return {
+    shadowCasters: [portal, interior.floor],
+    reflectors: [portal],
+    tunnel: { portal, ...interior },
+  };
 }
 
-function createFlowingMineralLoft(scene, name, options) {
-  const {
-    center,
-    span,
-    height,
-    thickness,
-    depth,
-    drift,
-    seed,
-    material,
-    getGroundHeight,
-  } = options;
-  const pathSegments = 48;
-  const profileSegments = 16;
+function createEntranceAxes() {
+  const forward = ENTRANCE_CENTER.subtract(VIEWER_POSITION).normalize();
+  forward.y = 0;
+  forward.normalize();
+  return {
+    forward,
+    lateral: new BABYLON.Vector3(forward.z, 0, -forward.x),
+  };
+}
+
+/**
+ * Creates a thick, asymmetric annular shell around an organic aperture. The
+ * changing curves and offset rear surface prevent it from reading as a pipe,
+ * a torus or a conventional doorway.
+ */
+function createOrganicPortalShell(scene, material, getGroundHeight, axes) {
+  const segments = 44;
   const positions = [];
   const indices = [];
   const uvs = [];
-  const leftBase = getGroundHeight(center.x - span * 0.5, center.z) - 0.18;
-  const rightBase = getGroundHeight(center.x + span * 0.5, center.z) - 0.18;
 
-  for (let pathIndex = 0; pathIndex <= pathSegments; pathIndex += 1) {
-    const progress = pathIndex / pathSegments;
+  for (let index = 0; index <= segments; index += 1) {
+    const progress = index / segments;
     const angle = Math.PI - progress * Math.PI;
-    const archWeight = Math.pow(Math.sin(progress * Math.PI), 0.8);
-    const baseY = leftBase + (rightBase - leftBase) * progress;
-    const centerX =
-      center.x +
-      Math.cos(angle) * span * 0.5 +
-      Math.sin(progress * Math.PI * 2.1 + seed * 0.13) * span * 0.044;
-    const centerY =
-      baseY +
-      archWeight * height +
-      Math.sin(progress * Math.PI * 3.2 + seed) * 0.2;
-    const centerZ =
-      center.z +
-      archWeight * drift +
-      Math.sin(progress * Math.PI * 1.45 + seed * 0.21) * 0.34;
-    const outward = new BABYLON.Vector3(
-      Math.cos(angle) / (span * 0.5),
-      Math.sin(angle) / height,
-      0,
-    ).normalize();
+    const inner = aperturePoint(angle, 0, getGroundHeight, axes);
+    const outer = aperturePoint(angle, 1, getGroundHeight, axes);
+    const faceOffset = axes.forward.scale(-0.2 - Math.sin(angle) * 0.16);
 
-    for (let profileIndex = 0; profileIndex < profileSegments; profileIndex += 1) {
-      const profile = (profileIndex / profileSegments) * Math.PI * 2;
-      const upperWeight = (Math.sin(profile) + 1) * 0.5;
-      const profileMass = 0.64 + Math.pow(1 - archWeight, 0.52) * 0.7 + upperWeight * 0.12;
-      const thicknessVariation =
-        1 +
-        Math.sin(progress * Math.PI * 3.7 + profile * 2.1 + seed) * 0.18 +
-        Math.cos(progress * Math.PI * 1.3 - profile * 3.5) * 0.11;
-      const radial = Math.cos(profile) * thickness * thicknessVariation * profileMass;
-      const lateral = Math.sin(profile) * depth * (0.62 + upperWeight * 0.58);
-      const mergedBase = Math.pow(1 - archWeight, 2.2) * (0.72 + upperWeight * 0.38);
-      const grain = Math.sin(profile * 5 + progress * 11 + seed) * 0.12;
-
-      positions.push(
-        centerX + outward.x * radial,
-        centerY + outward.y * radial + grain + mergedBase,
-        centerZ + lateral + Math.sin(progress * Math.PI * 4 + profile) * 0.15,
-      );
-      uvs.push(progress * 3.4, profileIndex / profileSegments);
-    }
+    pushPoint(positions, inner.add(faceOffset));
+    pushPoint(positions, outer.add(faceOffset));
+    uvs.push(progress * 2.2, 0, progress * 2.2, 1);
   }
 
-  for (let pathIndex = 0; pathIndex < pathSegments; pathIndex += 1) {
-    for (let profileIndex = 0; profileIndex < profileSegments; profileIndex += 1) {
-      const nextProfile = (profileIndex + 1) % profileSegments;
-      const current = pathIndex * profileSegments + profileIndex;
-      const nextPath = (pathIndex + 1) * profileSegments + profileIndex;
-      const currentNext = pathIndex * profileSegments + nextProfile;
-      const nextPathNext = (pathIndex + 1) * profileSegments + nextProfile;
-      indices.push(current, nextPath, nextPathNext, current, nextPathNext, currentNext);
-    }
+  for (let index = 0; index < segments; index += 1) {
+    const current = index * 2;
+    const next = current + 2;
+    indices.push(
+      current, current + 1, next + 1,
+      current, next + 1, next,
+    );
   }
 
   const normals = [];
   BABYLON.VertexData.ComputeNormals(positions, indices, normals);
-  const mesh = new BABYLON.Mesh(name, scene);
+  const portal = new BABYLON.Mesh("right-asymmetric-ivory-portal-shell", scene);
   const vertexData = new BABYLON.VertexData();
   vertexData.positions = positions;
   vertexData.indices = indices;
   vertexData.normals = normals;
   vertexData.uvs = uvs;
-  vertexData.applyToMesh(mesh);
-  mesh.material = material;
-  mesh.receiveShadows = true;
-  mesh.isPickable = false;
-  return mesh;
+  vertexData.applyToMesh(portal);
+  portal.material = material;
+  portal.receiveShadows = true;
+  portal.isPickable = false;
+  return portal;
 }
 
-function createIntegratedTunnel(scene, materials, getGroundHeight) {
-  // The entrance is deliberately offset to the right edge of the opening view:
-  // present at arrival, but never competing with the calm forward landscape.
-  const centerX = 9.4;
-  const centerZ = -1.2;
-  const shadowCasters = [];
-  const vineAnchors = [];
-
-  const facade = createTunnelFacade(scene, centerX, centerZ, materials, getGroundHeight);
-  shadowCasters.push(facade);
-
-  const cavity = createTunnelCavity(scene, centerX, centerZ, materials, getGroundHeight);
-  const floor = createTunnelFloor(scene, centerX, centerZ, materials, getGroundHeight);
-  shadowCasters.push(floor);
-
-  vineAnchors.push(
-    new BABYLON.Vector3(centerX - 4.25, getGroundHeight(centerX - 4.25, centerZ) + 5.4, centerZ + 0.6),
-    new BABYLON.Vector3(centerX + 3.85, getGroundHeight(centerX + 3.85, centerZ) + 5.65, centerZ + 1.2),
-    new BABYLON.Vector3(centerX - 2.75, getGroundHeight(centerX - 2.75, centerZ) + 6.45, centerZ + 1.7),
-  );
-
-  return { shadowCasters, vineAnchors, cavity };
+function aperturePoint(angle, layer, getGroundHeight, axes) {
+  const sin = Math.sin(angle);
+  const cos = Math.cos(angle);
+  const isOuter = layer === 1;
+  const widthBase = isOuter ? 3.95 : 2.18;
+  const heightBase = isOuter ? 5.7 : 3.45;
+  const width = widthBase * (1 + Math.sin(angle * 2.3 + (isOuter ? 0.6 : 0.1)) * 0.075);
+  const height = heightBase * (1 + Math.sin(angle * 1.7 + (isOuter ? 1.1 : 0.4)) * 0.06);
+  const lateralOffset = cos * width + sin * (isOuter ? 0.26 : 0.12);
+  const forwardOffset = sin * (isOuter ? 0.7 : 0.22) + Math.sin(angle * 3.2) * 0.14;
+  const x = ENTRANCE_CENTER.x + axes.lateral.x * lateralOffset + axes.forward.x * forwardOffset;
+  const z = ENTRANCE_CENTER.z + axes.lateral.z * lateralOffset + axes.forward.z * forwardOffset;
+  const baseY = getGroundHeight(x, z) - (isOuter ? 0.28 : 0.03);
+  const y = baseY + sin * height + (isOuter ? sin * sin * 0.5 : 0);
+  return new BABYLON.Vector3(x, y, z);
 }
 
-/**
- * A broad, variable cave facade. Unlike a swept tube, it is a thick mineral
- * landscape surface whose uneven lower edge gradually creates the tunnel mouth.
- */
-function createTunnelFacade(scene, centerX, centerZ, materials, getGroundHeight) {
-  const spanSegments = 42;
-  const depthSegments = 5;
-  const innerSpan = 6.4;
-  const innerHeight = 4.9;
-  const depth = 3.1;
-  const positions = [];
-  const indices = [];
-  const uvs = [];
-
-  const getIndex = (depthIndex, spanIndex, boundary) =>
-    (depthIndex * (spanSegments + 1) + spanIndex) * 2 + boundary;
-
-  for (let depthIndex = 0; depthIndex <= depthSegments; depthIndex += 1) {
-    const depthProgress = depthIndex / depthSegments;
-    for (let spanIndex = 0; spanIndex <= spanSegments; spanIndex += 1) {
-      const progress = spanIndex / spanSegments;
-      const archWeight = Math.pow(Math.sin(progress * Math.PI), 0.74);
-      const localGround = getGroundHeight(
-        centerX + (progress - 0.5) * innerSpan,
-        centerZ + depthProgress * depth,
-      );
-      const innerX =
-        centerX +
-        (progress - 0.5) * innerSpan +
-        Math.sin(progress * Math.PI * 2.4 + depthProgress * 1.6) * 0.22;
-      const innerY =
-        localGround +
-        archWeight * innerHeight +
-        Math.sin(progress * Math.PI * 4.3 + depthProgress * 2.4) * 0.18;
-      const innerZ = centerZ + depthProgress * depth + Math.sin(progress * Math.PI * 1.7) * 0.38;
-      const outerX = centerX + (innerX - centerX) * (1.13 + (1 - archWeight) * 0.12);
-      const outerY =
-        innerY +
-        1.4 +
-        archWeight * 1.32 +
-        Math.sin(progress * Math.PI * 3.1 + depthProgress) * 0.22 -
-        (1 - archWeight) * 1.7;
-      const outerZ = innerZ - 0.92 + Math.cos(progress * Math.PI * 2) * 0.18;
-
-      positions.push(innerX, innerY, innerZ, outerX, outerY, outerZ);
-      uvs.push(progress * 2.3, depthProgress * 2.2, progress * 2.3, depthProgress * 2.2);
-    }
-  }
-
-  for (let depthIndex = 0; depthIndex < depthSegments; depthIndex += 1) {
-    for (let spanIndex = 0; spanIndex < spanSegments; spanIndex += 1) {
-      const inner = getIndex(depthIndex, spanIndex, 0);
-      const outer = getIndex(depthIndex, spanIndex, 1);
-      const nextSpanInner = getIndex(depthIndex, spanIndex + 1, 0);
-      const nextSpanOuter = getIndex(depthIndex, spanIndex + 1, 1);
-      const nextDepthInner = getIndex(depthIndex + 1, spanIndex, 0);
-      const nextDepthOuter = getIndex(depthIndex + 1, spanIndex, 1);
-      const diagonalInner = getIndex(depthIndex + 1, spanIndex + 1, 0);
-      const diagonalOuter = getIndex(depthIndex + 1, spanIndex + 1, 1);
-
-      // Inner ceiling/walls and outer grown surface.
-      indices.push(inner, nextDepthInner, diagonalInner, inner, diagonalInner, nextSpanInner);
-      indices.push(outer, diagonalOuter, nextDepthOuter, outer, nextSpanOuter, diagonalOuter);
-    }
-  }
-
-  // Close the thickness only at the actual mouth and the far transition. Keeping
-  // these faces out of the intermediate depth strips avoids repeated arch rings.
-  for (let spanIndex = 0; spanIndex < spanSegments; spanIndex += 1) {
-    const frontInner = getIndex(0, spanIndex, 0);
-    const frontOuter = getIndex(0, spanIndex, 1);
-    const frontNextInner = getIndex(0, spanIndex + 1, 0);
-    const frontNextOuter = getIndex(0, spanIndex + 1, 1);
-    indices.push(frontInner, frontNextInner, frontNextOuter, frontInner, frontNextOuter, frontOuter);
-
-    const rearInner = getIndex(depthSegments, spanIndex, 0);
-    const rearOuter = getIndex(depthSegments, spanIndex, 1);
-    const rearNextInner = getIndex(depthSegments, spanIndex + 1, 0);
-    const rearNextOuter = getIndex(depthSegments, spanIndex + 1, 1);
-    indices.push(rearInner, rearOuter, rearNextOuter, rearInner, rearNextOuter, rearNextInner);
-  }
-
-  const normals = [];
-  BABYLON.VertexData.ComputeNormals(positions, indices, normals);
-  const facade = new BABYLON.Mesh("right-tunnel-landscape-facade", scene);
-  const vertexData = new BABYLON.VertexData();
-  vertexData.positions = positions;
-  vertexData.indices = indices;
-  vertexData.normals = normals;
-  vertexData.uvs = uvs;
-  vertexData.applyToMesh(facade);
-  facade.material = materials.mineral;
-  facade.receiveShadows = true;
-  facade.isPickable = false;
-  return facade;
+function createInvitingEntranceInterior(scene, material, getGroundHeight, axes) {
+  const shell = createInteriorShell(scene, material, getGroundHeight, axes);
+  const floor = createInteriorFloor(scene, material, getGroundHeight, axes);
+  const lightPosition = ENTRANCE_CENTER
+    .add(axes.forward.scale(1.45))
+    .add(new BABYLON.Vector3(0, getGroundHeight(ENTRANCE_CENTER.x, ENTRANCE_CENTER.z) + 3.05, 0));
+  const daylight = new BABYLON.PointLight("tunnel-mouth-soft-daylight", lightPosition, scene);
+  daylight.diffuse = BABYLON.Color3.FromHexString("#ffe1b7");
+  daylight.intensity = 0.42;
+  daylight.range = 10;
+  return { shell, floor, daylight };
 }
 
-/** Creates a real, warm mineral interior rather than a dark opening on a plane. */
-function createTunnelCavity(scene, centerX, centerZ, materials, getGroundHeight) {
-  const depthSegments = 22;
-  const arcSegments = 26;
+function createInteriorShell(scene, material, getGroundHeight, axes) {
+  const depthSegments = 16;
+  const arcSegments = 32;
   const positions = [];
   const indices = [];
   const uvs = [];
 
   for (let depthIndex = 0; depthIndex <= depthSegments; depthIndex += 1) {
     const progress = depthIndex / depthSegments;
-    const width = 3.18 - progress * 0.76 + Math.sin(progress * 4.1) * 0.16;
-    const height = 3.42 - progress * 0.78 + Math.sin(progress * 3.7) * 0.13;
-    const centerY = getGroundHeight(centerX, centerZ + progress * 10.6) + 0.1 + progress * 0.18;
-    const centerShift = Math.sin(progress * Math.PI * 1.2) * 0.44;
-    const z = centerZ + progress * 10.6;
+    const distance = 0.05 + progress * 5.15;
+    const center = ENTRANCE_CENTER.add(axes.forward.scale(distance));
+    const width = 2.12 - progress * 0.33 + Math.sin(progress * 5.1) * 0.08;
+    const height = 3.35 - progress * 0.32 + Math.sin(progress * 3.8) * 0.08;
 
     for (let arcIndex = 0; arcIndex <= arcSegments; arcIndex += 1) {
-      const arcProgress = arcIndex / arcSegments;
-      const angle = Math.PI - arcProgress * Math.PI;
-      const sideSoftening = 1 + Math.sin(angle * 2.7 + progress * 4.4) * 0.07;
-      positions.push(
-        centerX + centerShift + Math.cos(angle) * width * sideSoftening,
-        centerY + Math.sin(angle) * height * (0.94 + Math.cos(angle * 2) * 0.035),
-        z + Math.sin(angle * 3 + progress * 5) * 0.1,
-      );
-      uvs.push(arcProgress * 1.7, progress * 3.1);
+      const arc = arcIndex / arcSegments;
+      const angle = Math.PI - arc * Math.PI;
+      const side = Math.cos(angle) * width * (1 + Math.sin(angle * 2.5 + progress * 4.6) * 0.045);
+      const forwardShift = Math.sin(angle) * 0.12 + Math.sin(angle * 3.1 + progress * 4.9) * 0.07;
+      const x = center.x + axes.lateral.x * side + axes.forward.x * forwardShift;
+      const z = center.z + axes.lateral.z * side + axes.forward.z * forwardShift;
+      const baseY = getGroundHeight(x, z) + 0.04;
+      positions.push(x, baseY + Math.sin(angle) * height, z);
+      uvs.push(arc * 1.5, progress * 2.2);
     }
   }
 
@@ -267,52 +142,49 @@ function createTunnelCavity(scene, centerX, centerZ, materials, getGroundHeight)
 
   const normals = [];
   BABYLON.VertexData.ComputeNormals(positions, indices, normals);
-  const cavity = new BABYLON.Mesh("right-tunnel-sculpted-interior", scene);
+  const shell = new BABYLON.Mesh("right-inviting-ivory-interior", scene);
   const vertexData = new BABYLON.VertexData();
   vertexData.positions = positions;
   vertexData.indices = indices;
   vertexData.normals = normals;
   vertexData.uvs = uvs;
-  vertexData.applyToMesh(cavity);
-  cavity.material = materials.mineralInterior;
-  cavity.backFaceCulling = false;
-  cavity.isPickable = false;
-  return cavity;
+  vertexData.applyToMesh(shell);
+  shell.material = material;
+  shell.isPickable = false;
+  return shell;
 }
 
-function createTunnelFloor(scene, centerX, centerZ, materials, getGroundHeight) {
-  const route = [];
-  for (let index = 0; index <= 16; index += 1) {
-    const progress = index / 16;
-    const z = centerZ + progress * 10.4;
-    const center = new BABYLON.Vector3(
-      centerX + Math.sin(progress * Math.PI * 1.1) * 0.35,
-      getGroundHeight(centerX, z) + 0.07 + progress * 0.1,
-      z,
-    );
-    const width = 2.8 - progress * 0.62;
-    route.push({ center, width });
-  }
-
+function createInteriorFloor(scene, material, getGroundHeight, axes) {
+  const route = Array.from({ length: 14 }, (_, index) => {
+    const progress = index / 13;
+    const center = ENTRANCE_CENTER.add(axes.forward.scale(progress * 5.1));
+    return {
+      center: new BABYLON.Vector3(
+        center.x,
+        getGroundHeight(center.x, center.z) + 0.05,
+        center.z,
+      ),
+      width: 1.95 - progress * 0.2,
+    };
+  });
   const left = [];
   const right = [];
-  route.forEach((point, index) => {
-    const before = route[Math.max(0, index - 1)].center;
-    const after = route[Math.min(route.length - 1, index + 1)].center;
-    const direction = after.subtract(before).normalize();
-    const side = new BABYLON.Vector3(-direction.z, 0, direction.x);
-    left.push(point.center.add(side.scale(point.width)));
-    right.push(point.center.subtract(side.scale(point.width)));
+  route.forEach((point) => {
+    left.push(point.center.add(axes.lateral.scale(point.width)));
+    right.push(point.center.subtract(axes.lateral.scale(point.width)));
   });
 
   const floor = BABYLON.MeshBuilder.CreateRibbon(
-    "right-tunnel-ground-continuation",
+    "right-inviting-ivory-floor",
     { pathArray: [left, right], sideOrientation: BABYLON.Mesh.DOUBLESIDE },
     scene,
   );
-  floor.material = materials.mineralWeathered;
+  floor.material = material;
   floor.receiveShadows = true;
   floor.isPickable = false;
   return floor;
 }
-import { createSculpturalArchitecture } from "./createSculpturalArchitecture.js";
+
+function pushPoint(target, point) {
+  target.push(point.x, point.y, point.z);
+}

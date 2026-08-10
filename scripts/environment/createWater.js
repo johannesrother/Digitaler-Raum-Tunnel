@@ -45,14 +45,14 @@ function createWaterMaterial(scene) {
     new BABYLON.Vector2(256, 256),
   );
   material.bumpTexture = createRippleNormal(scene);
-  material.windForce = 0.35;
-  material.waveHeight = 0.018;
-  material.bumpHeight = 0.08;
-  material.waveLength = 0.34;
+  material.windForce = 0.22;
+  material.waveHeight = 0.012;
+  material.bumpHeight = 0.05;
+  material.waveLength = 0.42;
   material.windDirection = new BABYLON.Vector2(0.25, 0.68);
-  material.waterColor = BABYLON.Color3.FromHexString("#6b9c91");
-  material.colorBlendFactor = 0.24;
-  material.fresnelLevel = 0.72;
+  material.waterColor = BABYLON.Color3.FromHexString("#708e89");
+  material.colorBlendFactor = 0.32;
+  material.fresnelLevel = 0.52;
   material.specularPower = 128;
   material.backFaceCulling = false;
   return material;
