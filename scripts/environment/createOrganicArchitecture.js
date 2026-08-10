@@ -1,18 +1,28 @@
-const ENTRANCE_CENTER = new BABYLON.Vector3(9.3, 0, 2.45);
+// The camera initially looks along (-5.5, 8) from the standing position.
+// This centre is deliberately 30° to the visitor's right of that direction,
+// so the opening is present in the forward/right composition rather than at
+// the edge of a ninety-degree head turn.
+const ENTRANCE_CENTER = new BABYLON.Vector3(-1.02, 0, 7.35);
 const VIEWER_POSITION = new BABYLON.Vector3(0, 0, -5.5);
 
 /**
- * A single continuous ivory shell forms the Step-4 focal point. It is aligned
- * toward the visitor, so the opening reads as enterable from the rightward
- * glance rather than as a freestanding arch in the landscape.
+ * A single continuous ivory shell forms the focal point. It is a folded,
+ * asymmetric mineral surface around the opening, rather than a conventional
+ * circular arch or a separate tunnel object.
  */
 export function createIvoryArchitecture(scene, materials, getGroundHeight) {
   const axes = createEntranceAxes();
   const portal = createOrganicPortalShell(scene, materials.ivoryArchitecture, getGroundHeight, axes);
-  const interior = createInvitingEntranceInterior(scene, materials.ivoryInterior, getGroundHeight, axes);
+  const interior = createInvitingEntranceInterior(
+    scene,
+    materials.ivoryInterior,
+    materials.ivoryInteriorFade,
+    getGroundHeight,
+    axes,
+  );
 
   return {
-    shadowCasters: [portal, interior.floor],
+    shadowCasters: [portal, interior.floor, interior.fade],
     reflectors: [portal],
     tunnel: { portal, ...interior },
   };
@@ -29,12 +39,13 @@ function createEntranceAxes() {
 }
 
 /**
- * Creates a thick, asymmetric annular shell around an organic aperture. The
- * changing curves and offset rear surface prevent it from reading as a pipe,
- * a torus or a conventional doorway.
+ * Creates a wide, folded shell around the aperture. Four curved surface bands
+ * make the facade read as a sculpted piece of landscape instead of a flat,
+ * graphic arch.
  */
 function createOrganicPortalShell(scene, material, getGroundHeight, axes) {
-  const segments = 44;
+  const segments = 52;
+  const rings = 4;
   const positions = [];
   const indices = [];
   const uvs = [];
@@ -42,22 +53,20 @@ function createOrganicPortalShell(scene, material, getGroundHeight, axes) {
   for (let index = 0; index <= segments; index += 1) {
     const progress = index / segments;
     const angle = Math.PI - progress * Math.PI;
-    const inner = aperturePoint(angle, 0, getGroundHeight, axes);
-    const outer = aperturePoint(angle, 1, getGroundHeight, axes);
-    const faceOffset = axes.forward.scale(-0.2 - Math.sin(angle) * 0.16);
 
-    pushPoint(positions, inner.add(faceOffset));
-    pushPoint(positions, outer.add(faceOffset));
-    uvs.push(progress * 2.2, 0, progress * 2.2, 1);
+    for (let ring = 0; ring <= rings; ring += 1) {
+      const point = aperturePoint(angle, ring / rings, getGroundHeight, axes);
+      pushPoint(positions, point);
+      uvs.push(progress * 2.4, ring / rings);
+    }
   }
 
   for (let index = 0; index < segments; index += 1) {
-    const current = index * 2;
-    const next = current + 2;
-    indices.push(
-      current, current + 1, next + 1,
-      current, next + 1, next,
-    );
+    for (let ring = 0; ring < rings; ring += 1) {
+      const current = index * (rings + 1) + ring;
+      const next = current + rings + 1;
+      indices.push(current, current + 1, next + 1, current, next + 1, next);
+    }
   }
 
   const normals = [];
@@ -75,34 +84,43 @@ function createOrganicPortalShell(scene, material, getGroundHeight, axes) {
   return portal;
 }
 
-function aperturePoint(angle, layer, getGroundHeight, axes) {
+function aperturePoint(angle, spread, getGroundHeight, axes) {
   const sin = Math.sin(angle);
   const cos = Math.cos(angle);
-  const isOuter = layer === 1;
-  const widthBase = isOuter ? 3.95 : 2.18;
-  const heightBase = isOuter ? 5.7 : 3.45;
-  const width = widthBase * (1 + Math.sin(angle * 2.3 + (isOuter ? 0.6 : 0.1)) * 0.075);
-  const height = heightBase * (1 + Math.sin(angle * 1.7 + (isOuter ? 1.1 : 0.4)) * 0.06);
-  const lateralOffset = cos * width + sin * (isOuter ? 0.26 : 0.12);
-  const forwardOffset = sin * (isOuter ? 0.7 : 0.22) + Math.sin(angle * 3.2) * 0.14;
+  const innerWidth = cos < 0 ? 2.08 : 2.32;
+  const outerWidth = cos < 0 ? 4.7 : 3.85;
+  const innerHeight = 3.42;
+  const outerHeight = cos < 0 ? 5.85 : 5.2;
+  const width = BABYLON.Scalar.Lerp(innerWidth, outerWidth, spread)
+    * (1 + Math.sin(angle * 2.1 + 0.45) * 0.055);
+  const height = BABYLON.Scalar.Lerp(innerHeight, outerHeight, spread)
+    * (1 + Math.sin(angle * 1.65 + 0.75) * 0.045);
+  const lateralOffset = cos * width
+    + sin * BABYLON.Scalar.Lerp(0.12, 0.58, spread)
+    + spread * Math.sin(angle * 1.25) * 0.24;
+  const fold = Math.sin(angle) * Math.sin(angle);
+  const forwardOffset = sin * BABYLON.Scalar.Lerp(0.12, 0.72, spread)
+    + fold * spread * 0.34
+    + Math.sin(angle * 3.15 + spread * 2.5) * 0.1;
   const x = ENTRANCE_CENTER.x + axes.lateral.x * lateralOffset + axes.forward.x * forwardOffset;
   const z = ENTRANCE_CENTER.z + axes.lateral.z * lateralOffset + axes.forward.z * forwardOffset;
-  const baseY = getGroundHeight(x, z) - (isOuter ? 0.28 : 0.03);
-  const y = baseY + sin * height + (isOuter ? sin * sin * 0.5 : 0);
+  const baseY = getGroundHeight(x, z) - BABYLON.Scalar.Lerp(0.04, 0.34, spread);
+  const y = baseY + sin * height + fold * spread * 0.5;
   return new BABYLON.Vector3(x, y, z);
 }
 
-function createInvitingEntranceInterior(scene, material, getGroundHeight, axes) {
+function createInvitingEntranceInterior(scene, material, fadeMaterial, getGroundHeight, axes) {
   const shell = createInteriorShell(scene, material, getGroundHeight, axes);
   const floor = createInteriorFloor(scene, material, getGroundHeight, axes);
+  const fade = createInteriorFade(scene, fadeMaterial, getGroundHeight, axes);
   const lightPosition = ENTRANCE_CENTER
-    .add(axes.forward.scale(1.45))
+    .add(axes.forward.scale(1.6))
     .add(new BABYLON.Vector3(0, getGroundHeight(ENTRANCE_CENTER.x, ENTRANCE_CENTER.z) + 3.05, 0));
   const daylight = new BABYLON.PointLight("tunnel-mouth-soft-daylight", lightPosition, scene);
   daylight.diffuse = BABYLON.Color3.FromHexString("#ffe1b7");
   daylight.intensity = 0.42;
   daylight.range = 10;
-  return { shell, floor, daylight };
+  return { shell, floor, fade, daylight };
 }
 
 function createInteriorShell(scene, material, getGroundHeight, axes) {
@@ -114,7 +132,7 @@ function createInteriorShell(scene, material, getGroundHeight, axes) {
 
   for (let depthIndex = 0; depthIndex <= depthSegments; depthIndex += 1) {
     const progress = depthIndex / depthSegments;
-    const distance = 0.05 + progress * 5.15;
+    const distance = 0.05 + progress * 5.2;
     const center = ENTRANCE_CENTER.add(axes.forward.scale(distance));
     const width = 2.12 - progress * 0.33 + Math.sin(progress * 5.1) * 0.08;
     const height = 3.35 - progress * 0.32 + Math.sin(progress * 3.8) * 0.08;
@@ -183,6 +201,56 @@ function createInteriorFloor(scene, material, getGroundHeight, axes) {
   floor.receiveShadows = true;
   floor.isPickable = false;
   return floor;
+}
+
+/**
+ * The short interior gently resolves into an illuminated mineral surface.
+ * This gives the five-metre threshold depth without exposing a second,
+ * graphic arch or a black void behind the entrance.
+ */
+function createInteriorFade(scene, material, getGroundHeight, axes) {
+  const segments = 30;
+  const distance = 5.28;
+  const center = ENTRANCE_CENTER.add(axes.forward.scale(distance));
+  const positions = [];
+  const indices = [];
+  const uvs = [];
+  const width = 1.78;
+  const height = 3.02;
+
+  positions.push(
+    center.x,
+    getGroundHeight(center.x, center.z) + 0.06 + height * 0.42,
+    center.z,
+  );
+  uvs.push(0.5, 0.42);
+
+  for (let index = 0; index <= segments; index += 1) {
+    const angle = Math.PI - (index / segments) * Math.PI;
+    const side = Math.cos(angle) * width;
+    const forwardShift = Math.sin(angle) * 0.18;
+    const x = center.x + axes.lateral.x * side + axes.forward.x * forwardShift;
+    const z = center.z + axes.lateral.z * side + axes.forward.z * forwardShift;
+    positions.push(x, getGroundHeight(x, z) + 0.06 + Math.sin(angle) * height, z);
+    uvs.push(index / segments, 1);
+  }
+
+  for (let index = 0; index < segments; index += 1) {
+    indices.push(0, index + 2, index + 1);
+  }
+
+  const normals = [];
+  BABYLON.VertexData.ComputeNormals(positions, indices, normals);
+  const fade = new BABYLON.Mesh("ivory-threshold-light-fade", scene);
+  const vertexData = new BABYLON.VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = normals;
+  vertexData.uvs = uvs;
+  vertexData.applyToMesh(fade);
+  fade.material = material;
+  fade.isPickable = false;
+  return fade;
 }
 
 function pushPoint(target, point) {

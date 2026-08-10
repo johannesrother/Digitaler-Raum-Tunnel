@@ -24,25 +24,32 @@ export function createIdyllMaterials(scene) {
     environmentIntensity: 0.18,
   });
 
-  const ivoryArchitecture = createIvoryMaterial(scene, "ivory-sculptural-architecture", "#eadcc5");
+  const ivoryArchitecture = createIvoryMaterial(scene, "ivory-sculptural-architecture", "#f5d9ac");
   ivoryArchitecture.backFaceCulling = false;
 
   const ivoryInterior = ivoryArchitecture.clone("ivory-sculptural-interior");
-  ivoryInterior.albedoColor = BABYLON.Color3.FromHexString("#d9cbb8");
-  ivoryInterior.environmentIntensity = 0.24;
-  ivoryInterior.roughness = 0.9;
+  ivoryInterior.albedoColor = BABYLON.Color3.FromHexString("#efd0a2");
+  ivoryInterior.environmentIntensity = 0.28;
+  ivoryInterior.roughness = 0.87;
+  ivoryInterior.emissiveColor = BABYLON.Color3.FromHexString("#3a2009");
 
-  return { terrain, mixedGround, ivoryArchitecture, ivoryInterior };
+  const ivoryInteriorFade = ivoryInterior.clone("ivory-threshold-light-fade");
+  ivoryInteriorFade.albedoColor = BABYLON.Color3.FromHexString("#d9b67f");
+  ivoryInteriorFade.environmentIntensity = 0.14;
+  ivoryInteriorFade.emissiveColor = BABYLON.Color3.FromHexString("#211104");
+
+  return { terrain, mixedGround, ivoryArchitecture, ivoryInterior, ivoryInteriorFade };
 }
 
-/** Matte warm mineral response, deliberately free of a noisy rock texture. */
+/** Matte warm mineral response, with shape variation supplied by the sculpture. */
 function createIvoryMaterial(scene, name, color) {
   const material = new BABYLON.PBRMaterial(name, scene);
   material.albedoColor = BABYLON.Color3.FromHexString(color);
   material.metallic = 0;
-  material.roughness = 0.83;
-  material.environmentIntensity = 0.4;
-  material.specularIntensity = 0.22;
+  material.roughness = 0.78;
+  material.environmentIntensity = 0.32;
+  material.specularIntensity = 0.18;
+  material.emissiveColor = BABYLON.Color3.FromHexString("#211205");
   material.backFaceCulling = false;
   return material;
 }
