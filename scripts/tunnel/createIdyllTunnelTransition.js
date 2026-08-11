@@ -210,8 +210,11 @@ function createDistanceTable(totalLength, entryVelocity) {
   const baseEntrySpeed = getTunnelSpeed(0);
   // Keep the route duration at 60 seconds while making the first tunnel
   // velocity exactly equal to the velocity at the end of the suction path.
-  const baseScale = (totalLength - entryVelocity * carryIntegral)
-    / Math.max(baseIntegral - baseEntrySpeed * carryIntegral, 0.0001);
+  const baseScale = Math.max(
+    0,
+    (totalLength - entryVelocity * carryIntegral)
+      / Math.max(baseIntegral - baseEntrySpeed * carryIntegral, 0.0001),
+  );
   const speedAt = (time) => {
     const baseSpeed = getTunnelSpeed(time) * baseScale;
     return baseSpeed + (entryVelocity - baseEntrySpeed * baseScale) * momentumCarry(time);
@@ -235,9 +238,9 @@ function integrate(intervals, step, valueAt) {
 
 function momentumCarry(time) {
   const amount = BABYLON.Scalar.Clamp(time / MOMENTUM_SETTLE_DURATION, 0, 1);
-  // A gentle quadratic release keeps almost all of the threshold velocity for
-  // the first seconds, then settles naturally into the early tunnel pace.
-  return 1 - amount * amount;
+  // The residual of an ease-out cubic preserves the threshold velocity, then
+  // releases it quickly enough that the 77 m route can still last 60 seconds.
+  return (1 - amount) ** 3;
 }
 
 function sampleDistance(table, time) {
