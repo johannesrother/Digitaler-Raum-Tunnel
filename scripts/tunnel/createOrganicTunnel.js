@@ -316,14 +316,7 @@ function pushTunnelColor(target, time, angle, progress, look) {
   const charcoal = new BABYLON.Color3(0.135, 0.14, 0.16);
   const progression = smoothstep((time - 4) / 49);
   const base = BABYLON.Color3.Lerp(entryMineral, charcoal, progression);
-  const groove = Math.pow(Math.max(0, Math.sin(progress * 53 + angle * 1.48 + Math.sin(progress * 17) * 1.9)), 14);
-  const grooveAmount = groove * (0.08 + look.detail * 0.16);
-  target.push(
-    BABYLON.Scalar.Lerp(base.r, base.r * 0.48, grooveAmount),
-    BABYLON.Scalar.Lerp(base.g, base.g * 0.48, grooveAmount),
-    BABYLON.Scalar.Lerp(base.b, base.b * 0.54, grooveAmount),
-    1,
-  );
+  target.push(base.r, base.g, base.b, 1);
 }
 
 function createTunnelMaterials(scene) {
@@ -373,16 +366,6 @@ function createTunnelMaterials(scene) {
   ridge.environmentIntensity = 0.2;
   ridge.specularIntensity = 0.3;
 
-  const groove = createDarkMaterial(
-    "organic-tunnel-embedded-groove",
-    BABYLON.Color3.FromHexString("#15181d"),
-    0.73,
-    textureSets.base,
-    0.08,
-  );
-  groove.bumpTexture.level = 0.08;
-  groove.emissiveColor = BABYLON.Color3.FromHexString("#020304");
-
   const membrane = createDarkMaterial(
     "organic-tunnel-translucent-membrane",
     BABYLON.Color3.FromHexString("#4a4c52"),
@@ -404,7 +387,6 @@ function createTunnelMaterials(scene) {
     surface,
     floor,
     ridge,
-    groove,
     membrane,
     particle,
     updateSurface(time) {
@@ -419,7 +401,7 @@ function createTunnelMaterials(scene) {
       surface.roughness = profile.roughness;
     },
     dispose() {
-      [surface, floor, ridge, groove, membrane, particle].forEach((material) => material.dispose());
+      [surface, floor, ridge, membrane, particle].forEach((material) => material.dispose());
     },
   };
 }
@@ -476,7 +458,6 @@ function createOtherworldlyDetails(scene, route, materials) {
   const litMeshes = [];
   const disposableMaterials = [];
   const ribs = [];
-  const channels = [];
   const membranes = [];
   const particles = [];
 
@@ -497,23 +478,6 @@ function createOtherworldlyDetails(scene, route, materials) {
     mesh.receiveShadows = false;
     litMeshes.push(mesh);
     ribs.push({ material, progress });
-  });
-
-  const channelDefinitions = [
-    [0.28, 5.38, 0.72], [0.42, 1.48, 0.58], [0.56, 4.38, 0.88],
-    [0.69, 0.68, 0.66], [0.79, 2.91, 0.94], [0.88, 5.02, 0.54],
-  ];
-  channelDefinitions.forEach(([progress, angle, span], index) => {
-    const material = materials.groove.clone(`organic-tunnel-internal-groove-${index}`);
-    material.albedoColor = BABYLON.Color3.FromHexString("#12151a");
-    material.emissiveColor = BABYLON.Color3.FromHexString("#020304");
-    disposableMaterials.push(material);
-    const mesh = createLongitudinalGroove(scene, route, progress, angle, span, index);
-    mesh.material = material;
-    mesh.isPickable = false;
-    mesh.receiveShadows = false;
-    litMeshes.push(mesh);
-    channels.push({ material, progress });
   });
 
   const membraneDefinitions = [
@@ -559,14 +523,6 @@ function createOtherworldlyDetails(scene, route, materials) {
     update(time, impulse, impulseProgress, delta) {
       const look = getTunnelLook(time);
       const otherness = smoothstep((time - 8) / 43);
-      channels.forEach(({ material, progress }) => {
-        const passingPulse = localPulse(time, progress * TUNNEL_DURATION, 1.15);
-        const impulsePulse = Math.exp(-Math.pow((progress - impulseProgress) / 0.055, 2)) * impulse;
-        const glow = otherness * 0.045 + passingPulse * 0.15 + impulsePulse * 0.09;
-        material.emissiveColor.r = glow * 0.34;
-        material.emissiveColor.g = glow * 0.38;
-        material.emissiveColor.b = glow * 0.44;
-      });
       ribs.forEach(({ material, progress }) => {
         const response = Math.exp(-Math.pow((progress - impulseProgress) / 0.042, 2)) * impulse;
         const sheen = otherness * 0.006 + response * 0.035;
@@ -622,29 +578,6 @@ function createWallRidge(scene, route, progress, angle, span, depth, index) {
   );
 }
 
-function createLongitudinalGroove(scene, route, progress, angle, span, index) {
-  const paths = [];
-  for (let row = 0; row <= 2; row += 1) {
-    const width = (row - 1) * 0.024;
-    const path = [];
-    for (let column = 0; column <= 10; column += 1) {
-      const amount = column / 10 - 0.5;
-      path.push(wallPoint(
-        route,
-        progress + amount * span,
-        angle + Math.sin(amount * Math.PI) * 0.22 + width,
-        0.065 + Math.cos(amount * Math.PI) * 0.02 + Math.abs(width) * 0.14,
-      ));
-    }
-    paths.push(path);
-  }
-  return BABYLON.MeshBuilder.CreateRibbon(
-    `organic-tunnel-buried-groove-${index}`,
-    { pathArray: paths, sideOrientation: BABYLON.Mesh.DOUBLESIDE },
-    scene,
-  );
-}
-
 function createWallMembrane(scene, route, progress, angle, arc, length, index) {
   const paths = [];
   for (let row = 0; row <= 4; row += 1) {
@@ -679,14 +612,6 @@ function wallPoint(route, progress, angle, inset) {
   return center
     .add(lateral.scale(Math.cos(angle) * radius))
     .add(vertical.scale(Math.sin(angle) * radius - lowerFlatten));
-}
-
-function localPulse(time, center, width) {
-  const distance = Math.abs(time - center);
-  if (distance > width) {
-    return 0;
-  }
-  return Math.pow(1 - distance / width, 3);
 }
 
 function createTunnelLights(scene, meshes, route) {
