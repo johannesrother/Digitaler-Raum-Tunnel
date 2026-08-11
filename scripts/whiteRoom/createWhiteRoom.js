@@ -21,12 +21,30 @@ export function createWhiteRoom(scene, tunnelEnd) {
 
   const originalClearColor = scene.clearColor.clone();
   const originalFogDensity = scene.fogDensity;
+  const voidMaterial = voidMesh.material;
+  let enabled = false;
+
+  const preview = (amount) => {
+    const blend = BABYLON.Scalar.Clamp(amount, 0, 1);
+    if (!enabled) {
+      voidMesh.setEnabled(true);
+      enabled = true;
+    }
+    voidMaterial.alpha = blend;
+    scene.clearColor = new BABYLON.Color4(
+      BABYLON.Scalar.Lerp(originalClearColor.r, 1, blend),
+      BABYLON.Scalar.Lerp(originalClearColor.g, 1, blend),
+      BABYLON.Scalar.Lerp(originalClearColor.b, 1, blend),
+      1,
+    );
+    scene.fogDensity = BABYLON.Scalar.Lerp(originalFogDensity, 0, blend);
+  };
 
   return {
     finalPosition,
+    preview,
     activate() {
-      voidMesh.setEnabled(true);
-      scene.clearColor = new BABYLON.Color4(1, 1, 1, 1);
+      preview(1);
       scene.fogDensity = 0;
     },
     dispose() {

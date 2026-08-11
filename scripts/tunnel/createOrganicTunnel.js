@@ -46,6 +46,7 @@ export function createOrganicTunnel(scene, options) {
   let nextImpulseAt = 12.7;
   let impulse = 0;
   let impulseProgress = 0;
+  let exitGlow = 0;
   let activeTime = 0;
   let sequenceActive = false;
   let previousFrameTime = performance.now();
@@ -59,7 +60,7 @@ export function createOrganicTunnel(scene, options) {
     shell.updateDeformation(impulseProgress, impulse);
     details.update(activeTime, impulse, impulseProgress, delta);
     materials.updateSurface(activeTime);
-    updateTunnelLights(lights, activeTime, impulse);
+    updateTunnelLights(lights, activeTime, impulse, exitGlow);
     impulse = Math.max(0, impulse - delta * 2.9);
   });
 
@@ -91,7 +92,7 @@ export function createOrganicTunnel(scene, options) {
       shell.updateDeformation(impulseProgress, impulse);
       details.update(activeTime, impulse, impulseProgress, 0);
       materials.updateSurface(activeTime);
-      updateTunnelLights(lights, activeTime, impulse * (0.25 + look.detail * 0.75));
+      updateTunnelLights(lights, activeTime, impulse * (0.25 + look.detail * 0.75), exitGlow);
     },
     setSequenceActive(active) {
       sequenceActive = active;
@@ -101,8 +102,11 @@ export function createOrganicTunnel(scene, options) {
         shell.updateDeformation(0, 0);
         details.update(0, 0, 0, 0);
         materials.updateSurface(0);
-        updateTunnelLights(lights, 0, 0);
+        updateTunnelLights(lights, 0, 0, 0);
       }
+    },
+    setExitGlow(amount) {
+      exitGlow = BABYLON.Scalar.Clamp(amount, 0, 1);
     },
     dispose() {
       scene.onBeforeRenderObservable.remove(observer);
@@ -635,14 +639,15 @@ function createTunnelLights(scene, meshes, route) {
   return { points, fill };
 }
 
-function updateTunnelLights(lights, time, impulse) {
+function updateTunnelLights(lights, time, impulse, exitGlow = 0) {
   const look = getTunnelLook(time);
   const phase = getTunnelPhase(time);
   lights.fill.intensity = 0.11 + look.light * 0.24;
   lights.points.forEach((light, index) => {
     const proximity = 1 - Math.min(1, Math.abs(index / (lights.points.length - 1) - time / TUNNEL_DURATION) * 2.6);
     const pulse = index === 2 ? impulse * 0.16 : 0;
-    light.intensity = (0.52 + proximity * 0.94) * look.light + pulse;
+    const exitBleed = index === lights.points.length - 1 ? exitGlow * 1.35 : 0;
+    light.intensity = (0.52 + proximity * 0.94) * look.light + pulse + exitBleed;
     light.diffuse = BABYLON.Color3.FromHexString(phase.id === "PEAK" && index >= 3 ? "#5b606a" : "#d5d8dd");
   });
 }

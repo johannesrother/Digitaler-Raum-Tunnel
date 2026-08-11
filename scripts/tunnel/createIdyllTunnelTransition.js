@@ -6,9 +6,10 @@ import {
 
 const TUNNEL_START = 20;
 const TUNNEL_END = TUNNEL_START + TUNNEL_DURATION;
-const FALL_DURATION = 1;
+const FALL_DURATION = 1.1;
 const WHITE_ROOM_DURATION = 5;
 const MOVEMENT_EASE_IN_DURATION = 0.8;
+const WHITE_PREVIEW_START = TUNNEL_DURATION - 3;
 
 /**
  * The only automatic motion in the experience. A parent transform carries
@@ -49,6 +50,10 @@ export function createIdyllTunnelTransition(scene, options) {
       tunnelTime = elapsed - TUNNEL_START;
       options.tunnel.update(tunnelTime);
       applyPathTransform(root, tunnelRoute, tunnelTime, initialHeading, delta);
+      const whitePreview = smoothstep((tunnelTime - WHITE_PREVIEW_START) / (TUNNEL_DURATION - WHITE_PREVIEW_START));
+      options.whiteRoom.preview(whitePreview);
+      options.tunnel.setExitGlow(whitePreview);
+      options.whiteRoomTone.preview(whitePreview);
       // Keep the idyll readable behind the visitor immediately after crossing
       // the threshold, then remove its large ground surfaces before they can
       // intrude into the deeper tunnel volume.
@@ -57,9 +62,14 @@ export function createIdyllTunnelTransition(scene, options) {
         outsideGroundHidden = true;
       }
     } else if (elapsed >= TUNNEL_END) {
+      const transitionTime = elapsed - TUNNEL_END;
       activateWhiteRoom(options, root);
-      const fall = controlledFall((elapsed - TUNNEL_END) / FALL_DURATION);
+      const fall = controlledFall(transitionTime / FALL_DURATION);
       root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, options.whiteRoom.finalPosition, fall));
+      if (transitionTime >= FALL_DURATION) {
+        options.tunnel.setEnabled(false);
+        options.tunnel.setSequenceActive(false);
+      }
       if (!whiteRoomFinished && elapsed >= TUNNEL_END + WHITE_ROOM_DURATION) {
         options.whiteRoomTone.deactivate();
         whiteRoomFinished = true;
@@ -202,8 +212,6 @@ function activateWhiteRoom(options, root) {
     return;
   }
   options.whiteRoomActive = true;
-  options.tunnel.setEnabled(false);
-  options.tunnel.setSequenceActive(false);
   options.whiteRoom.activate();
   options.whiteRoomTone.activate();
   root.rotation.x = 0;
@@ -221,6 +229,11 @@ function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initial
   }
   if (elapsed < TUNNEL_END) {
     applyPathTransform(root, tunnelRoute, elapsed - TUNNEL_START, initialHeading, 0);
+    return;
+  }
+  if (elapsed < TUNNEL_END + FALL_DURATION) {
+    const fall = controlledFall((elapsed - TUNNEL_END) / FALL_DURATION);
+    root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, whiteRoom.finalPosition, fall));
     return;
   }
   root.position.copyFrom(whiteRoom.finalPosition);

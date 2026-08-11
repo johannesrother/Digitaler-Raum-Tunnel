@@ -32,6 +32,15 @@ export function createWhiteRoomTone() {
   window.addEventListener("keydown", arm, { once: true });
 
   return {
+    preview(amount) {
+      if (!context || !gain) {
+        return;
+      }
+      const level = BABYLON.Scalar.Lerp(0, 0.018, BABYLON.Scalar.Clamp(amount, 0, 1));
+      gain.gain.cancelScheduledValues(context.currentTime);
+      gain.gain.setValueAtTime(gain.gain.value, context.currentTime);
+      gain.gain.linearRampToValueAtTime(level, context.currentTime + 0.12);
+    },
     activate() {
       if (activated || !context || !gain) {
         return;
@@ -39,7 +48,7 @@ export function createWhiteRoomTone() {
       activated = true;
       gain.gain.cancelScheduledValues(context.currentTime);
       gain.gain.setValueAtTime(gain.gain.value, context.currentTime);
-      gain.gain.linearRampToValueAtTime(0.045, context.currentTime + 0.35);
+      gain.gain.linearRampToValueAtTime(0.045, context.currentTime + 0.8);
     },
     deactivate() {
       if (!context || !gain) {
