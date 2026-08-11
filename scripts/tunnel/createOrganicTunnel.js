@@ -58,6 +58,7 @@ export function createOrganicTunnel(scene, options) {
     }
     shell.updateDeformation(impulseProgress, impulse);
     details.update(activeTime, impulse, impulseProgress, delta);
+    materials.updateSurface(activeTime);
     updateTunnelLights(lights, activeTime, impulse);
     impulse = Math.max(0, impulse - delta * 2.9);
   });
@@ -89,6 +90,7 @@ export function createOrganicTunnel(scene, options) {
       }
       shell.updateDeformation(impulseProgress, impulse);
       details.update(activeTime, impulse, impulseProgress, 0);
+      materials.updateSurface(activeTime);
       updateTunnelLights(lights, activeTime, impulse * (0.25 + look.detail * 0.75));
     },
     setSequenceActive(active) {
@@ -98,6 +100,7 @@ export function createOrganicTunnel(scene, options) {
         impulse = 0;
         shell.updateDeformation(0, 0);
         details.update(0, 0, 0, 0);
+        materials.updateSurface(0);
         updateTunnelLights(lights, 0, 0);
       }
     },
@@ -324,12 +327,13 @@ function pushTunnelColor(target, time, angle, progress, look) {
 }
 
 function createTunnelMaterials(scene) {
-  const texturePath = "./assets/textures/architecture/ivory-mineral/";
-  const createDarkMaterial = (name, color, roughness) => {
+  const textureSets = createTunnelTextureSets(scene);
+  const createDarkMaterial = (name, color, roughness, textureSet, normalLevel = 0.13) => {
     const material = new BABYLON.PBRMaterial(name, scene);
-    material.bumpTexture = createTexture(scene, `${texturePath}ivory_mineral_1k_normalgl.jpg`, 1, false);
-    material.bumpTexture.level = 0.13;
-    material.metallicTexture = createTexture(scene, `${texturePath}ivory_mineral_1k_roughness.jpg`, 1, false);
+    material.albedoTexture = textureSet.albedo;
+    material.bumpTexture = textureSet.normal;
+    material.bumpTexture.level = normalLevel;
+    material.metallicTexture = textureSet.roughness;
     material.useRoughnessFromMetallicTextureGreen = true;
     material.useMetallnessFromMetallicTextureBlue = false;
     material.albedoColor = color;
@@ -345,6 +349,8 @@ function createTunnelMaterials(scene) {
     "organic-tunnel-matte-surface",
     BABYLON.Color3.White(),
     0.9,
+    textureSets.smooth,
+    0.1,
   );
   surface.useVertexColors = true;
   surface.emissiveColor = BABYLON.Color3.FromHexString("#090a0e");
@@ -353,12 +359,16 @@ function createTunnelMaterials(scene) {
     "organic-tunnel-charcoal-floor",
     BABYLON.Color3.FromHexString("#17191d"),
     0.86,
+    textureSets.base,
+    0.14,
   );
 
   const ridge = createDarkMaterial(
     "organic-tunnel-mineral-ridge",
     BABYLON.Color3.FromHexString("#303239"),
     0.46,
+    textureSets.organic,
+    0.2,
   );
   ridge.environmentIntensity = 0.2;
   ridge.specularIntensity = 0.3;
@@ -367,6 +377,8 @@ function createTunnelMaterials(scene) {
     "organic-tunnel-embedded-crimson",
     BABYLON.Color3.FromHexString("#26090c"),
     0.73,
+    textureSets.base,
+    0.08,
   );
   red.bumpTexture.level = 0.08;
   red.emissiveColor = BABYLON.Color3.FromHexString("#050001");
@@ -375,6 +387,8 @@ function createTunnelMaterials(scene) {
     "organic-tunnel-translucent-membrane",
     BABYLON.Color3.FromHexString("#4a4c52"),
     0.58,
+    textureSets.deep,
+    0.16,
   );
   membrane.alpha = 0.24;
   membrane.transparencyMode = BABYLON.PBRMaterial.PBRMATERIAL_ALPHABLEND;
@@ -393,10 +407,64 @@ function createTunnelMaterials(scene) {
     red,
     membrane,
     particle,
+    updateSurface(time) {
+      const phase = getTunnelPhase(time).id;
+      const profile = surfaceTextureProfile(phase, textureSets);
+      if (surface.albedoTexture !== profile.textureSet.albedo) {
+        surface.albedoTexture = profile.textureSet.albedo;
+        surface.bumpTexture = profile.textureSet.normal;
+        surface.metallicTexture = profile.textureSet.roughness;
+      }
+      surface.bumpTexture.level = profile.normalLevel;
+      surface.roughness = profile.roughness;
+    },
     dispose() {
       [surface, floor, ridge, red, membrane, particle].forEach((material) => material.dispose());
     },
   };
+}
+
+function createTunnelTextureSets(scene) {
+  const path = "./assets/textures/tunnel/";
+  const createSet = (albedo, normal, roughness) => ({
+    albedo: createTexture(scene, `${path}${albedo}`, 1, true),
+    normal: createTexture(scene, `${path}${normal}`, 1, false),
+    roughness: createTexture(scene, `${path}${roughness}`, 1, false),
+  });
+  return {
+    smooth: createSet(
+      "rock_01_1k/textures/rock_01_diff_1k.jpg",
+      "rock_01_1k/textures/rock_01_nor_gl_1k.jpg",
+      "rock_01_1k/textures/rock_01_rough_1k.jpg",
+    ),
+    base: createSet(
+      "Rock027_1K-JPG/Rock027_1K-JPG_Color.jpg",
+      "Rock027_1K-JPG/Rock027_1K-JPG_NormalGL.jpg",
+      "Rock027_1K-JPG/Rock027_1K-JPG_Roughness.jpg",
+    ),
+    organic: createSet(
+      "rock_05_1k/textures/rock_05_diff_1k.jpg",
+      "rock_05_1k/textures/rock_05_nor_gl_1k.jpg",
+      "rock_05_1k/textures/rock_05_rough_1k.jpg",
+    ),
+    deep: createSet(
+      "aerial_rocks_04_1k/textures/aerial_rocks_04_diff_1k.jpg",
+      "aerial_rocks_04_1k/textures/aerial_rocks_04_nor_gl_1k.jpg",
+      "aerial_rocks_04_1k/textures/aerial_rocks_04_rough_1k.jpg",
+    ),
+  };
+}
+
+function surfaceTextureProfile(phase, textureSets) {
+  const profiles = {
+    ENTRY: { textureSet: textureSets.smooth, normalLevel: 0.1, roughness: 0.92 },
+    UNEASE: { textureSet: textureSets.base, normalLevel: 0.14, roughness: 0.89 },
+    COMPRESSION: { textureSet: textureSets.base, normalLevel: 0.18, roughness: 0.86 },
+    ACCELERATION: { textureSet: textureSets.organic, normalLevel: 0.22, roughness: 0.83 },
+    PEAK: { textureSet: textureSets.deep, normalLevel: 0.26, roughness: 0.8 },
+    FINAL_ASCENT: { textureSet: textureSets.deep, normalLevel: 0.2, roughness: 0.84 },
+  };
+  return profiles[phase] ?? profiles.ENTRY;
 }
 
 /**
