@@ -3,9 +3,9 @@ import { createIdyllEnvironment } from "../environment/createIdyllEnvironment.js
 import { createOrganicTunnel } from "../tunnel/createOrganicTunnel.js";
 import { clearTunnelTerrain } from "../tunnel/clearTunnelTerrain.js";
 import { createIdyllTunnelTransition } from "../tunnel/createIdyllTunnelTransition.js";
+import { createSuctionDebris } from "../tunnel/createSuctionDebris.js";
 import { createWhiteRoom } from "../whiteRoom/createWhiteRoom.js";
 import { createWhiteRoomTone } from "../audio/createWhiteRoomTone.js";
-import { createTunnelAmbience } from "../audio/createTunnelAmbience.js";
 
 /** Creates the static, standing-height idyll scene. WebXR is added separately. */
 export async function createIdyllScene(engine, canvas) {
@@ -26,13 +26,11 @@ export async function createIdyllScene(engine, canvas) {
   environment.lighting.excludeFromTunnel(tunnel.mesh);
   environment.lighting.excludeFromTunnel(tunnel.floor);
   tunnel.grassPatches.forEach((patch) => environment.lighting.excludeFromTunnel(patch));
-  const tunnelExit = tunnel.route.positionAt(0.986);
-  const exitDirection = tunnel.route.tangentAt(0.986);
-  exitDirection.y = 0;
-  exitDirection.normalize();
-  const whiteRoom = createWhiteRoom(scene, tunnelExit, exitDirection);
+  // Match the final tunnel travel position so the hand-off into the void has
+  // no lateral jump before the controlled vertical fall begins.
+  const whiteRoom = createWhiteRoom(scene, tunnel.route.positionAt(0.986));
   const whiteRoomTone = createWhiteRoomTone();
-  const tunnelAmbience = createTunnelAmbience();
+  const suctionDebris = createSuctionDebris(scene, environment.architecture.entrance);
   const transition = createIdyllTunnelTransition(scene, {
     startPosition: environment.startPosition,
     entrance: environment.architecture.entrance,
@@ -44,9 +42,9 @@ export async function createIdyllScene(engine, canvas) {
     initialForward: desktopCamera.getForwardRay(1).direction.clone(),
     whiteRoom,
     whiteRoomTone,
-    tunnelAmbience,
+    suctionDebris,
   });
-  scene.metadata = { environment, desktopCamera, tunnel, transition, whiteRoom, whiteRoomTone, tunnelAmbience };
+  scene.metadata = { environment, desktopCamera, tunnel, transition, whiteRoom, whiteRoomTone, suctionDebris };
 
   return scene;
 }

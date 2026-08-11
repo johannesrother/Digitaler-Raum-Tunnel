@@ -1,18 +1,19 @@
 export const TUNNEL_DURATION = 60;
 
 export const TUNNEL_PHASES = [
-  { id: "FIRST_UNEASE", start: 0, end: 10, diameter: 5.0, detail: 0.1, light: 0.9, pulse: 0.12, unreality: 0, twitchEvery: 8.6 },
-  { id: "PHYSICAL_ACTIVATION", start: 10, end: 22, diameter: 4.05, detail: 0.26, light: 0.68, pulse: 0.32, unreality: 0.08, twitchEvery: 6.7 },
-  { id: "FEEDBACK_LOOP", start: 22, end: 38, diameter: 2.4, detail: 0.52, light: 0.46, pulse: 0.64, unreality: 0.28, twitchEvery: 4.15 },
-  { id: "PANIC_PEAK", start: 38, end: 52, diameter: 1.88, detail: 0.86, light: 0.28, pulse: 1, unreality: 0.76, twitchEvery: 2.45 },
-  { id: "DECLINE", start: 52, end: 60, diameter: 1.5, detail: 0.42, light: 0.48, pulse: 0.08, unreality: 0.08, twitchEvery: 7.8 },
+  { id: "ENTRY", start: 0, end: 10, speed: 1.02, diameter: 3.5, detail: 0.08, red: 0, light: 0.92, twitchEvery: 0 },
+  { id: "UNEASE", start: 10, end: 22, speed: 1.08, diameter: 3.0, detail: 0.22, red: 0.05, light: 0.7, twitchEvery: 8.2 },
+  { id: "COMPRESSION", start: 22, end: 36, speed: 1.18, diameter: 2.4, detail: 0.44, red: 0.16, light: 0.5, twitchEvery: 6.1 },
+  { id: "ACCELERATION", start: 36, end: 48, speed: 1.44, diameter: 2.0, detail: 0.62, red: 0.32, light: 0.38, twitchEvery: 4.2 },
+  { id: "PEAK", start: 48, end: 56, speed: 1.68, diameter: 1.65, detail: 0.86, red: 0.62, light: 0.28, twitchEvery: 2.7 },
+  { id: "FINAL_ASCENT", start: 56, end: 60, speed: 1.54, diameter: 1.5, detail: 0.78, red: 0.4, light: 0.34, twitchEvery: 4.6 },
 ];
 
 // Small releases stop the narrowing from becoming a mechanically linear ramp.
 const DIAMETER_KEYS = [
-  [0, 5.0], [10, 4.05], [16, 3.6], [22, 2.9], [28, 2.7],
-  [31, 2.48], [34, 2.68], [38, 2.12], [45, 1.88], [52, 1.74],
-  [56, 1.65], [60, 1.5],
+  [0, 3.5], [10, 3.2], [16, 3.3], [22, 2.9], [28, 2.7],
+  [31, 2.48], [34, 2.68], [36, 2.35], [42, 2.12], [48, 2.0],
+  [52, 1.74], [56, 1.65], [60, 1.5],
 ];
 
 export function getTunnelPhase(time) {
@@ -24,13 +25,21 @@ export function getTunnelDiameter(time) {
   return interpolateKeys(DIAMETER_KEYS, time);
 }
 
+export function getTunnelSpeed(time) {
+  const phase = getTunnelPhase(time);
+  const next = TUNNEL_PHASES[TUNNEL_PHASES.indexOf(phase) + 1] ?? phase;
+  const amount = smoothstep((time - phase.start) / Math.max(phase.end - phase.start, 0.001));
+  return BABYLON.Scalar.Lerp(phase.speed, next.speed, amount);
+}
+
 export function getTunnelLook(time) {
   const phase = getTunnelPhase(time);
+  const next = TUNNEL_PHASES[TUNNEL_PHASES.indexOf(phase) + 1] ?? phase;
+  const amount = smoothstep((time - phase.start) / Math.max(phase.end - phase.start, 0.001));
   return {
-    detail: phase.detail,
-    light: phase.light,
-    pulse: phase.pulse,
-    unreality: phase.unreality,
+    detail: BABYLON.Scalar.Lerp(phase.detail, next.detail, amount),
+    red: BABYLON.Scalar.Lerp(phase.red, next.red, amount),
+    light: BABYLON.Scalar.Lerp(phase.light, next.light, amount),
   };
 }
 
