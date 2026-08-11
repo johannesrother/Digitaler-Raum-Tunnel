@@ -17,7 +17,7 @@ export async function createIdyllEnvironment(scene) {
     terrain.getGroundHeight,
   );
   const architecture = createIvoryArchitecture(scene, materials, terrain.getGroundHeight);
-  const breeze = createBreeze(scene, assets.placed, architecture.entrance.center);
+  const breeze = createBreeze(scene, assets.placed);
   water.configureReflections([
     lighting.sky,
     terrain.terrain,
