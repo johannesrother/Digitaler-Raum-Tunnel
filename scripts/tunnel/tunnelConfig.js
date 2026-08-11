@@ -1,8 +1,8 @@
 export const TUNNEL_DURATION = 60;
 
 export const TUNNEL_PHASES = [
-  { id: "ENTRY", start: 0, end: 10, speed: 1.02, diameter: 3.5, detail: 0.08, red: 0, light: 0.92, twitchEvery: 0 },
-  { id: "UNEASE", start: 10, end: 22, speed: 1.08, diameter: 3.0, detail: 0.22, red: 0.05, light: 0.7, twitchEvery: 8.2 },
+  { id: "ENTRY", start: 0, end: 10, speed: 1.02, diameter: 5.0, detail: 0.08, red: 0, light: 0.92, twitchEvery: 0 },
+  { id: "UNEASE", start: 10, end: 22, speed: 1.08, diameter: 4.05, detail: 0.22, red: 0.05, light: 0.7, twitchEvery: 8.2 },
   { id: "COMPRESSION", start: 22, end: 36, speed: 1.18, diameter: 2.4, detail: 0.44, red: 0.16, light: 0.5, twitchEvery: 6.1 },
   { id: "ACCELERATION", start: 36, end: 48, speed: 1.44, diameter: 2.0, detail: 0.62, red: 0.32, light: 0.38, twitchEvery: 4.2 },
   { id: "PEAK", start: 48, end: 56, speed: 1.68, diameter: 1.65, detail: 0.86, red: 0.62, light: 0.28, twitchEvery: 2.7 },
@@ -11,7 +11,7 @@ export const TUNNEL_PHASES = [
 
 // Small releases stop the narrowing from becoming a mechanically linear ramp.
 const DIAMETER_KEYS = [
-  [0, 3.5], [10, 3.2], [16, 3.3], [22, 2.9], [28, 2.7],
+  [0, 5.0], [10, 4.05], [16, 3.6], [22, 2.9], [28, 2.7],
   [31, 2.48], [34, 2.68], [36, 2.35], [42, 2.12], [48, 2.0],
   [52, 1.74], [56, 1.65], [60, 1.5],
 ];
