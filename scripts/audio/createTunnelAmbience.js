@@ -7,6 +7,7 @@ export function createTunnelAmbience() {
   let lowGain = null;
   let textureGain = null;
   let highGain = null;
+  let pulseGain = null;
 
   const arm = async () => {
     if (context) {
@@ -20,7 +21,8 @@ export function createTunnelAmbience() {
     lowGain = context.createGain();
     textureGain = context.createGain();
     highGain = context.createGain();
-    [lowGain, textureGain, highGain].forEach((gain) => {
+    pulseGain = context.createGain();
+    [lowGain, textureGain, highGain, pulseGain].forEach((gain) => {
       gain.gain.value = 0;
       gain.connect(context.destination);
     });
@@ -36,6 +38,12 @@ export function createTunnelAmbience() {
     high.frequency.value = 137;
     high.connect(highGain);
     high.start();
+
+    const pulse = context.createOscillator();
+    pulse.type = "sine";
+    pulse.frequency.value = 72;
+    pulse.connect(pulseGain);
+    pulse.start();
 
     const buffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
     const samples = buffer.getChannelData(0);
@@ -76,8 +84,20 @@ export function createTunnelAmbience() {
       // without becoming a literal cardiac rhythm or a volume spike.
       const interference = 0.82 + Math.sin(time * 1.17) * 0.1 + Math.sin(time * 0.43 + 1.4) * 0.08;
       setGain(lowGain, profile.low * interference);
-      setGain(textureGain, profile.texture * (0.9 + Math.sin(time * 0.71) * 0.1));
+      const breathPressure = 0.68 + Math.sin(time * profile.breathRate + 0.9) * 0.22 + Math.sin(time * 0.37) * 0.1;
+      setGain(textureGain, profile.texture * breathPressure);
       setGain(highGain, profile.high);
+    },
+    pulse(strength) {
+      if (!context || !pulseGain) {
+        return;
+      }
+      const now = context.currentTime;
+      const peak = 0.006 + strength * 0.018;
+      pulseGain.gain.cancelScheduledValues(now);
+      pulseGain.gain.setValueAtTime(0, now);
+      pulseGain.gain.linearRampToValueAtTime(peak, now + 0.025);
+      pulseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
     },
     deactivate() {
       setGain(lowGain, 0);
@@ -93,18 +113,19 @@ export function createTunnelAmbience() {
 }
 
 function ambienceProfile(time) {
-  if (time < 10) return { low: 0.003, texture: 0, high: 0 };
-  if (time < 22) {
-    const amount = (time - 10) / 12;
-    return { low: lerp(0.004, 0.009, amount), texture: lerp(0.0005, 0.002, amount), high: 0 };
+  if (time < 8) return { low: 0.003, texture: 0.0004, high: 0, breathRate: 0.45 };
+  if (time < 18) {
+    const amount = (time - 8) / 10;
+    return { low: lerp(0.005, 0.011, amount), texture: lerp(0.0015, 0.0035, amount), high: 0.0003, breathRate: lerp(0.58, 0.8, amount) };
   }
-  if (time < 38) {
-    const amount = (time - 22) / 16;
-    return { low: lerp(0.01, 0.017, amount), texture: lerp(0.0025, 0.006, amount), high: lerp(0.0004, 0.0018, amount) };
+  if (time < 30) {
+    const amount = (time - 18) / 12;
+    return { low: lerp(0.012, 0.019, amount), texture: lerp(0.004, 0.007, amount), high: lerp(0.0008, 0.0025, amount), breathRate: lerp(0.86, 1.08, amount) };
   }
-  if (time < 52) return { low: 0.021, texture: 0.008, high: 0.0028 };
-  const decline = 1 - (time - 52) / 8;
-  return { low: 0.021 * decline, texture: 0.008 * decline * decline, high: 0.0028 * decline * decline };
+  if (time < 42) return { low: 0.022, texture: 0.009, high: 0.0035, breathRate: 1.23 };
+  if (time < 53) return { low: 0.024, texture: 0.011, high: 0.0045, breathRate: 1.48 };
+  const decline = 1 - (time - 53) / 7;
+  return { low: 0.024 * decline, texture: 0.011 * decline * decline, high: 0.0045 * decline * decline, breathRate: lerp(1.15, 0.35, 1 - decline) };
 }
 
 function lerp(from, to, amount) {

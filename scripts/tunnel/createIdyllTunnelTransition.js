@@ -10,7 +10,7 @@ const WHITE_ROOM_DECELERATION_DURATION = 2;
 const TUNNEL_RELEASE_DURATION = 2;
 const WHITE_ROOM_DURATION = 5;
 const MOVEMENT_EASE_IN_DURATION = 0.8;
-const WHITE_PREVIEW_START = TUNNEL_DURATION - 3;
+const WHITE_PREVIEW_START = TUNNEL_DURATION - 7;
 
 /**
  * The only automatic motion in the experience. A parent transform carries
@@ -19,8 +19,11 @@ const WHITE_PREVIEW_START = TUNNEL_DURATION - 3;
 export function createIdyllTunnelTransition(scene, options) {
   const root = new BABYLON.TransformNode("idyll-to-tunnel-locomotion-root", scene);
   const start = options.startPosition.clone();
-  const entry = createEntryPath(start, options.entrance, options.initialForward, options.tunnel.route.start);
-  const tunnelRoute = createTunnelTravelRoute(entry, options.tunnel.route);
+  const entryRoute = createPolylineRoute(
+    createEntryPath(start, options.entrance, options.initialForward, options.tunnel.route.start),
+    TUNNEL_START,
+  );
+  const tunnelRoute = createTunnelTravelRoute(options.tunnel.route);
   const debug = createDebugPanel();
   let elapsed = 0;
   let xrCamera = null;
@@ -47,7 +50,9 @@ export function createIdyllTunnelTransition(scene, options) {
     elapsed += delta;
     let tunnelTime = 0;
 
-    if (elapsed >= TUNNEL_START && elapsed < TUNNEL_END) {
+    if (elapsed < TUNNEL_START) {
+      applyPathTransform(root, entryRoute, elapsed, initialHeading, delta);
+    } else if (elapsed < TUNNEL_END) {
       tunnelTime = elapsed - TUNNEL_START;
       options.tunnel.update(tunnelTime);
       options.tunnelAmbience.update(tunnelTime);
@@ -78,7 +83,7 @@ export function createIdyllTunnelTransition(scene, options) {
         whiteRoomFinished = true;
       }
     }
-    debug.update(elapsed, tunnelTime);
+    debug.update(elapsed, tunnelTime, tunnelRoute);
   });
 
   return {
@@ -91,14 +96,14 @@ export function createIdyllTunnelTransition(scene, options) {
         if (isInXr) {
           xrCamera = xr.baseExperience.camera;
           xrCamera.parent = root;
-          syncRootToExperienceTime(root, elapsed, tunnelRoute, options.whiteRoom, initialHeading);
+          syncRootToExperienceTime(root, elapsed, entryRoute, tunnelRoute, options.whiteRoom, initialHeading);
           return;
         }
         if (xrCamera) {
           xrCamera.parent = null;
           xrCamera = null;
         }
-        syncRootToExperienceTime(root, elapsed, tunnelRoute, options.whiteRoom, initialHeading);
+        syncRootToExperienceTime(root, elapsed, entryRoute, tunnelRoute, options.whiteRoom, initialHeading);
       });
     },
     dispose() {
@@ -126,14 +131,12 @@ function createEntryPath(start, entrance, initialForward, finish) {
   return points;
 }
 
-function createTunnelTravelRoute(entryPath, tunnelRoute) {
-  const points = [...entryPath];
+function createTunnelTravelRoute(tunnelRoute) {
+  const points = [];
   for (let index = 0; index <= 188; index += 1) {
     // Stop just inside the open exit; the final two seconds continue
     // horizontally into the physically present White Room.
-    if (index > 0) {
-      points.push(tunnelRoute.positionAt(index / 188 * 0.986));
-    }
+    points.push(tunnelRoute.positionAt(index / 188 * 0.986));
   }
   return createPolylineRoute(points, TUNNEL_DURATION, createDistanceTable);
 }
@@ -162,6 +165,15 @@ function createPolylineRoute(points, duration, distanceTableFactory = null) {
     length: totalLength,
     endPosition: points.at(-1).clone(),
     positionAt,
+    distanceAt(time) {
+      const clamped = BABYLON.Scalar.Clamp(time, 0, duration);
+      return distanceTable ? sampleDistance(distanceTable, clamped) : clamped / duration * totalLength;
+    },
+    speedAt(time) {
+      const before = Math.max(0, time - 0.05);
+      const after = Math.min(duration, time + 0.05);
+      return Math.abs(this.distanceAt(after) - this.distanceAt(before)) / Math.max(after - before, 0.001);
+    },
     tangentAt(time) {
       // A short future sample filters tiny spline detail without delaying the
       // turning response into a visible late rotation.
@@ -181,7 +193,8 @@ function createPolylineRoute(points, duration, distanceTableFactory = null) {
 function createDistanceTable(totalLength) {
   const intervals = 480;
   const step = TUNNEL_DURATION / intervals;
-  const speedAt = (time) => smoothstep(time / MOVEMENT_EASE_IN_DURATION);
+  const speedAt = (time) => smoothstep(time / MOVEMENT_EASE_IN_DURATION)
+    * (1 + smoothstep((time - 57) / 3) * 0.18);
   const values = [0];
   let accumulated = 0;
   for (let index = 1; index <= intervals; index += 1) {
@@ -226,8 +239,9 @@ function easeOutCubic(amount) {
   return 1 - (1 - clamped) ** 3;
 }
 
-function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initialHeading) {
+function syncRootToExperienceTime(root, elapsed, entryRoute, tunnelRoute, whiteRoom, initialHeading) {
   if (elapsed < TUNNEL_START) {
+    applyPathTransform(root, entryRoute, elapsed, initialHeading, 0);
     return;
   }
   if (elapsed < TUNNEL_END) {
@@ -263,15 +277,17 @@ function createDebugPanel() {
   panel.className = "tunnel-debug-panel";
   document.body.append(panel);
   return {
-    update(experienceTime, tunnelTime) {
+    update(experienceTime, tunnelTime, tunnelRoute) {
       const phase = getTunnelPhase(tunnelTime);
       panel.textContent = [
         `Experience: ${experienceTime.toFixed(1)} s`,
         `Tunnel: ${tunnelTime.toFixed(1)} / ${TUNNEL_DURATION} s`,
         `Phase: ${phase.id}`,
+        `Distance: ${tunnelRoute.distanceAt(tunnelTime).toFixed(1)} / ${tunnelRoute.length.toFixed(1)} m`,
+        `Speed: ${tunnelRoute.speedAt(tunnelTime).toFixed(2)} m/s`,
         `Progress: ${(tunnelTime / TUNNEL_DURATION * 100).toFixed(0)} %`,
         `Diameter: ${getTunnelDiameter(tunnelTime).toFixed(2)} m`,
-        "Speed: controlled",
+        `Entry: ${TUNNEL_START.toFixed(1)} s · White threshold: ${TUNNEL_END.toFixed(1)} s`,
       ].join("\n");
     },
     dispose() {
