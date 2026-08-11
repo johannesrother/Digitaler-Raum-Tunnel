@@ -3,8 +3,8 @@
  * The visitor is enclosed by a very large inverted sphere, so no room edges,
  * corners, lights or horizon line become readable.
  */
-export function createWhiteRoom(scene, tunnelEnd) {
-  const finalPosition = tunnelEnd.add(new BABYLON.Vector3(0, -6.2, 0));
+export function createWhiteRoom(scene, tunnelExit, exitDirection) {
+  const finalPosition = tunnelExit.add(exitDirection.scale(3.2));
   const voidMesh = BABYLON.MeshBuilder.CreateSphere(
     "white-room-endless-void",
     {

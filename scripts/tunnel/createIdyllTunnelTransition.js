@@ -6,7 +6,8 @@ import {
 
 const TUNNEL_START = 20;
 const TUNNEL_END = TUNNEL_START + TUNNEL_DURATION;
-const FALL_DURATION = 1.1;
+const WHITE_ROOM_DECELERATION_DURATION = 2;
+const TUNNEL_RELEASE_DURATION = 0.9;
 const WHITE_ROOM_DURATION = 5;
 const MOVEMENT_EASE_IN_DURATION = 0.8;
 const WHITE_PREVIEW_START = TUNNEL_DURATION - 3;
@@ -64,9 +65,9 @@ export function createIdyllTunnelTransition(scene, options) {
     } else if (elapsed >= TUNNEL_END) {
       const transitionTime = elapsed - TUNNEL_END;
       activateWhiteRoom(options, root);
-      const fall = controlledFall(transitionTime / FALL_DURATION);
-      root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, options.whiteRoom.finalPosition, fall));
-      if (transitionTime >= FALL_DURATION) {
+      const arrival = easeOutCubic(transitionTime / WHITE_ROOM_DECELERATION_DURATION);
+      root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, options.whiteRoom.finalPosition, arrival));
+      if (transitionTime >= TUNNEL_RELEASE_DURATION) {
         options.tunnel.setEnabled(false);
         options.tunnel.setSequenceActive(false);
       }
@@ -126,7 +127,7 @@ function createEntryPath(start, entrance, initialForward, finish) {
 function createTunnelTravelRoute(entryPath, tunnelRoute) {
   const points = [...entryPath];
   for (let index = 0; index <= 188; index += 1) {
-    // The cap stays just ahead of the final ascent endpoint; the visitor can
+    // The cap stays just ahead of the final exit; the visitor can
     // never cross it or leave the visible tunnel volume.
     if (index > 0) {
       points.push(tunnelRoute.positionAt(index / 188 * 0.986));
@@ -218,9 +219,9 @@ function activateWhiteRoom(options, root) {
   root.rotation.z = 0;
 }
 
-function controlledFall(amount) {
+function easeOutCubic(amount) {
   const clamped = BABYLON.Scalar.Clamp(amount, 0, 1);
-  return clamped * clamped * (3 - 2 * clamped);
+  return 1 - (1 - clamped) ** 3;
 }
 
 function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initialHeading) {
@@ -231,9 +232,9 @@ function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initial
     applyPathTransform(root, tunnelRoute, elapsed - TUNNEL_START, initialHeading, 0);
     return;
   }
-  if (elapsed < TUNNEL_END + FALL_DURATION) {
-    const fall = controlledFall((elapsed - TUNNEL_END) / FALL_DURATION);
-    root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, whiteRoom.finalPosition, fall));
+  if (elapsed < TUNNEL_END + WHITE_ROOM_DECELERATION_DURATION) {
+    const arrival = easeOutCubic((elapsed - TUNNEL_END) / WHITE_ROOM_DECELERATION_DURATION);
+    root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, whiteRoom.finalPosition, arrival));
     return;
   }
   root.position.copyFrom(whiteRoom.finalPosition);

@@ -137,9 +137,9 @@ function createTunnelRoute(entrance) {
     fromEntrance(34, -0.8, -0.14),
     fromEntrance(45, 1.5, -0.04),
     fromEntrance(55, 1.2, 0.18),
-    fromEntrance(62, -0.3, 0.58),
-    fromEntrance(65, 0.15, 1.42),
-    fromEntrance(66, 0.4, 3.05),
+    fromEntrance(62, -0.3, 0.28),
+    fromEntrance(65, 0.15, 0.38),
+    fromEntrance(66, 0.4, 0.42),
   ];
   const samples = [];
   let totalLength = 0;
@@ -448,7 +448,7 @@ function surfaceTextureProfile(phase, textureSets) {
     COMPRESSION: { textureSet: textureSets.base, normalLevel: 0.18, roughness: 0.86 },
     ACCELERATION: { textureSet: textureSets.organic, normalLevel: 0.22, roughness: 0.83 },
     PEAK: { textureSet: textureSets.deep, normalLevel: 0.26, roughness: 0.8 },
-    FINAL_ASCENT: { textureSet: textureSets.deep, normalLevel: 0.2, roughness: 0.84 },
+    FINAL_EXIT: { textureSet: textureSets.deep, normalLevel: 0.2, roughness: 0.84 },
   };
   return profiles[phase] ?? profiles.ENTRY;
 }

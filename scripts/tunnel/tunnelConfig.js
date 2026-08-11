@@ -6,7 +6,7 @@ export const TUNNEL_PHASES = [
   { id: "COMPRESSION", start: 22, end: 36, diameter: 2.4, detail: 0.44, light: 0.5, twitchEvery: 6.1 },
   { id: "ACCELERATION", start: 36, end: 48, diameter: 2.0, detail: 0.62, light: 0.38, twitchEvery: 4.2 },
   { id: "PEAK", start: 48, end: 56, diameter: 1.65, detail: 0.86, light: 0.28, twitchEvery: 2.7 },
-  { id: "FINAL_ASCENT", start: 56, end: 60, diameter: 1.5, detail: 0.78, light: 0.34, twitchEvery: 4.6 },
+  { id: "FINAL_EXIT", start: 56, end: 60, diameter: 1.5, detail: 0.78, light: 0.34, twitchEvery: 4.6 },
 ];
 
 // Small releases stop the narrowing from becoming a mechanically linear ramp.
