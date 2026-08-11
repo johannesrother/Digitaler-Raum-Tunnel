@@ -43,7 +43,7 @@ export function createOrganicTunnel(scene, options) {
     ...details.litMeshes,
   ];
   const lights = createTunnelLights(scene, litMeshes, route);
-  let nextImpulseAt = 12.7;
+  let nextImpulseAt = 6.8;
   let impulse = 0;
   let impulseProgress = 0;
   let exitGlow = 0;
@@ -57,9 +57,9 @@ export function createOrganicTunnel(scene, options) {
     if (sequenceActive) {
       activeTime = Math.min(activeTime + delta, TUNNEL_DURATION);
     }
-    shell.updateDeformation(impulseProgress, impulse);
+    shell.updateDeformation(impulseProgress, impulse, getTunnelLook(activeTime));
     details.update(activeTime, impulse, impulseProgress, delta);
-    materials.updateSurface(activeTime);
+    materials.updateSurface(activeTime, impulse);
     updateTunnelLights(lights, activeTime, impulse, exitGlow);
     impulse = Math.max(0, impulse - delta * 2.9);
   });
@@ -89,9 +89,9 @@ export function createOrganicTunnel(scene, options) {
         const interval = getTunnelTwitchInterval(activeTime);
         nextImpulseAt += interval > 0 ? interval * (0.72 + ((nextImpulseAt * 1.73) % 0.58)) : 9;
       }
-      shell.updateDeformation(impulseProgress, impulse);
+      shell.updateDeformation(impulseProgress, impulse, look);
       details.update(activeTime, impulse, impulseProgress, 0);
-      materials.updateSurface(activeTime);
+      materials.updateSurface(activeTime, impulse);
       updateTunnelLights(lights, activeTime, impulse * (0.25 + look.detail * 0.75), exitGlow);
     },
     setSequenceActive(active) {
@@ -99,9 +99,9 @@ export function createOrganicTunnel(scene, options) {
       if (!active) {
         activeTime = 0;
         impulse = 0;
-        shell.updateDeformation(0, 0);
+        shell.updateDeformation(0, 0, getTunnelLook(0));
         details.update(0, 0, 0, 0);
-        materials.updateSurface(0);
+        materials.updateSurface(0, 0);
         updateTunnelLights(lights, 0, 0, 0);
       }
     },
@@ -263,10 +263,10 @@ function createTunnelShell(scene, route) {
   return {
     mesh,
     // Only an isolated ring of the existing shell contracts during an impulse.
-    // Keeping the displacement below four centimetres avoids discomfort and
-    // does not alter the approved tunnel diameter progression.
-    updateDeformation(centerProgress, amount) {
-      const strength = BABYLON.Scalar.Clamp(amount, 0, 1) * 0.024;
+    // The displacement never exceeds four centimetres, so the alarm remains
+    // environmental rather than a camera or locomotion effect.
+    updateDeformation(centerProgress, amount, look) {
+      const strength = BABYLON.Scalar.Clamp(amount, 0, 1) * (0.009 + look.pulse * 0.031);
       if (strength < 0.0002 && !isDeformed) {
         return;
       }
@@ -383,16 +383,21 @@ function createTunnelMaterials(scene) {
     ridge,
     membrane,
     particle,
-    updateSurface(time) {
+    updateSurface(time, impulse) {
       const phase = getTunnelPhase(time).id;
       const profile = surfaceTextureProfile(phase, textureSets);
+      const look = getTunnelLook(time);
       if (surface.albedoTexture !== profile.textureSet.albedo) {
         surface.albedoTexture = profile.textureSet.albedo;
         surface.bumpTexture = profile.textureSet.normal;
         surface.metallicTexture = profile.textureSet.roughness;
       }
-      surface.bumpTexture.level = profile.normalLevel;
-      surface.roughness = profile.roughness;
+      const drift = look.unreality * (Math.sin(time * 1.37) * 0.003 + Math.sin(time * 2.41 + 0.8) * 0.0015);
+      surface.albedoTexture.uOffset = drift;
+      surface.bumpTexture.uOffset = drift * 1.25;
+      surface.metallicTexture.uOffset = drift * 0.72;
+      surface.bumpTexture.level = profile.normalLevel + impulse * look.unreality * 0.035;
+      surface.roughness = profile.roughness - impulse * look.unreality * 0.045;
     },
     dispose() {
       [surface, floor, ridge, membrane, particle].forEach((material) => material.dispose());
@@ -433,14 +438,13 @@ function createTunnelTextureSets(scene) {
 
 function surfaceTextureProfile(phase, textureSets) {
   const profiles = {
-    ENTRY: { textureSet: textureSets.smooth, normalLevel: 0.1, roughness: 0.92 },
-    UNEASE: { textureSet: textureSets.base, normalLevel: 0.14, roughness: 0.89 },
-    COMPRESSION: { textureSet: textureSets.base, normalLevel: 0.18, roughness: 0.86 },
-    ACCELERATION: { textureSet: textureSets.organic, normalLevel: 0.22, roughness: 0.83 },
-    PEAK: { textureSet: textureSets.deep, normalLevel: 0.26, roughness: 0.8 },
-    FINAL_EXIT: { textureSet: textureSets.deep, normalLevel: 0.2, roughness: 0.84 },
+    FIRST_UNEASE: { textureSet: textureSets.smooth, normalLevel: 0.1, roughness: 0.92 },
+    PHYSICAL_ACTIVATION: { textureSet: textureSets.base, normalLevel: 0.14, roughness: 0.89 },
+    FEEDBACK_LOOP: { textureSet: textureSets.base, normalLevel: 0.19, roughness: 0.85 },
+    PANIC_PEAK: { textureSet: textureSets.deep, normalLevel: 0.25, roughness: 0.8 },
+    DECLINE: { textureSet: textureSets.organic, normalLevel: 0.14, roughness: 0.88 },
   };
-  return profiles[phase] ?? profiles.ENTRY;
+  return profiles[phase] ?? profiles.FIRST_UNEASE;
 }
 
 /**
@@ -516,23 +520,23 @@ function createOtherworldlyDetails(scene, route, materials) {
     litMeshes,
     update(time, impulse, impulseProgress, delta) {
       const look = getTunnelLook(time);
-      const otherness = smoothstep((time - 8) / 43);
+      const otherness = getTunnelLook(time).unreality;
       ribs.forEach(({ material, progress }) => {
         const response = Math.exp(-Math.pow((progress - impulseProgress) / 0.042, 2)) * impulse;
-        const sheen = otherness * 0.006 + response * 0.035;
+        const sheen = otherness * 0.008 + response * (0.012 + otherness * 0.028);
         material.emissiveColor.r = sheen * 0.72;
         material.emissiveColor.g = sheen * 0.78;
         material.emissiveColor.b = sheen;
       });
       membranes.forEach(({ material, progress }) => {
         const response = Math.exp(-Math.pow((progress - impulseProgress) / 0.06, 2)) * impulse;
-        material.alpha = 0.18 + otherness * 0.09 + response * 0.055;
+        material.alpha = 0.18 + otherness * 0.09 + response * (0.018 + otherness * 0.04);
         material.emissiveColor.r = response * 0.022;
         material.emissiveColor.g = response * 0.025;
         material.emissiveColor.b = response * 0.032;
       });
       particles.forEach((particle) => {
-        const visible = time > 18 && time < 57 && particle.progress <= time / TUNNEL_DURATION + 0.12;
+        const visible = time > 18 && time < 55 && particle.progress <= time / TUNNEL_DURATION + 0.12;
         particle.mesh.setEnabled(visible);
         if (visible && delta > 0) {
           particle.mesh.position.y = particle.origin.y + Math.sin(time * 0.53 + particle.phase) * 0.012;
@@ -638,7 +642,7 @@ function updateTunnelLights(lights, time, impulse, exitGlow = 0) {
     const pulse = index === 2 ? impulse * 0.16 : 0;
     const exitBleed = index === lights.points.length - 1 ? exitGlow * 1.35 : 0;
     light.intensity = (0.52 + proximity * 0.94) * look.light + pulse + exitBleed;
-    light.diffuse = BABYLON.Color3.FromHexString(phase.id === "PEAK" && index >= 3 ? "#5b606a" : "#d5d8dd");
+    light.diffuse = BABYLON.Color3.FromHexString(phase.id === "PANIC_PEAK" && index >= 3 ? "#5b606a" : "#d5d8dd");
   });
 }
 

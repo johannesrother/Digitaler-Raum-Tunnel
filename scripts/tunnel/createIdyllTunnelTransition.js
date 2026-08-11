@@ -50,6 +50,7 @@ export function createIdyllTunnelTransition(scene, options) {
     if (elapsed >= TUNNEL_START && elapsed < TUNNEL_END) {
       tunnelTime = elapsed - TUNNEL_START;
       options.tunnel.update(tunnelTime);
+      options.tunnelAmbience.update(tunnelTime);
       applyPathTransform(root, tunnelRoute, tunnelTime, initialHeading, delta);
       const whitePreview = smoothstep((tunnelTime - WHITE_PREVIEW_START) / (TUNNEL_DURATION - WHITE_PREVIEW_START));
       options.whiteRoom.preview(whitePreview);
@@ -65,6 +66,7 @@ export function createIdyllTunnelTransition(scene, options) {
     } else if (elapsed >= TUNNEL_END) {
       const transitionTime = elapsed - TUNNEL_END;
       activateWhiteRoom(options, root);
+      options.tunnelAmbience.deactivate();
       const arrival = easeOutCubic(transitionTime / WHITE_ROOM_DECELERATION_DURATION);
       root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, options.whiteRoom.finalPosition, arrival));
       if (transitionTime >= TUNNEL_RELEASE_DURATION) {
@@ -127,8 +129,8 @@ function createEntryPath(start, entrance, initialForward, finish) {
 function createTunnelTravelRoute(entryPath, tunnelRoute) {
   const points = [...entryPath];
   for (let index = 0; index <= 188; index += 1) {
-    // The cap stays just ahead of the final exit; the visitor can
-    // never cross it or leave the visible tunnel volume.
+    // Stop just inside the open exit; the final two seconds continue
+    // horizontally into the physically present White Room.
     if (index > 0) {
       points.push(tunnelRoute.positionAt(index / 188 * 0.986));
     }
