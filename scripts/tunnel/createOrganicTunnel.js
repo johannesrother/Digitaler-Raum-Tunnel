@@ -217,11 +217,12 @@ function createTunnelShell(scene, route) {
     const { lateral, vertical } = route.frameAt(progress);
     const diameter = getTunnelDiameter(time);
     const look = getTunnelLook(time);
+    const exitRelease = smoothstep((progress - 0.94) / 0.06);
 
     for (let side = 0; side < PROFILE_SIDES; side += 1) {
       const angle = (side / PROFILE_SIDES) * Math.PI * 2;
       const profile = organicProfile(angle, progress, look.detail);
-      const radius = diameter * 0.5 * profile;
+      const radius = diameter * 0.5 * profile * BABYLON.Scalar.Lerp(1, 2.2, exitRelease);
       const lowerFlatten = Math.max(0, -Math.sin(angle)) * radius * 0.12;
       const point = center
         .add(lateral.scale(Math.cos(angle) * radius * (1 + Math.sin(angle + progress * 5.2) * 0.045)))
@@ -243,17 +244,6 @@ function createTunnelShell(scene, route) {
       // Reversed winding makes the calculated normals face toward the visitor.
       indices.push(current, nextNext, next, current, currentNext, nextNext);
     }
-  }
-
-  const capCenter = positions.length / 3;
-  const end = route.end.clone();
-  end.y += EYE_HEIGHT;
-  positions.push(end.x, end.y, end.z);
-  uvs.push(1, 0.5);
-  colors.push(0.04, 0.035, 0.05, 1);
-  const endStart = PATH_SAMPLES * PROFILE_SIDES;
-  for (let side = 0; side < PROFILE_SIDES; side += 1) {
-    indices.push(capCenter, endStart + side, endStart + ((side + 1) % PROFILE_SIDES));
   }
 
   BABYLON.VertexData.ComputeNormals(positions, indices, normals);
