@@ -11,7 +11,7 @@ const TUNNEL_START = 20;
 const TUNNEL_END = TUNNEL_START + TUNNEL_DURATION;
 const FALL_DURATION = 1;
 const WHITE_ROOM_DURATION = 5;
-const ACCELERATION_DURATION = 1.6;
+const MOMENTUM_SETTLE_DURATION = 4.5;
 
 /**
  * The only automatic motion in the experience. A parent transform carries
@@ -22,7 +22,7 @@ export function createIdyllTunnelTransition(scene, options) {
   const start = options.startPosition.clone();
   const entry = createEntryPath(start, options.entrance, options.initialForward, options.tunnel.route.start);
   const suctionRoute = createSuctionRoute(entry);
-  const tunnelRoute = createTunnelTravelRoute(options.tunnel.route);
+  const tunnelRoute = createTunnelTravelRoute(options.tunnel.route, getSuctionEntryVelocity(suctionRoute));
   const debug = createDebugPanel();
   let elapsed = 0;
   let xrCamera = null;
@@ -145,14 +145,21 @@ function createSuctionRoute(points) {
   return createPolylineRoute(points, 1);
 }
 
-function createTunnelTravelRoute(tunnelRoute) {
+function getSuctionEntryVelocity(suctionRoute) {
+  // suctionProgress() is cubic, so its derivative at the threshold carries
+  // the full existing pull into the tunnel instead of starting from rest.
+  const progressRate = 3.15 / (TUNNEL_START - SUCTION_START);
+  return suctionRoute.length * progressRate;
+}
+
+function createTunnelTravelRoute(tunnelRoute, entryVelocity) {
   const points = [];
   for (let index = 0; index <= 188; index += 1) {
     // The cap stays just ahead of the final ascent endpoint; the visitor can
     // never cross it or leave the visible tunnel volume.
     points.push(tunnelRoute.positionAt(index / 188 * 0.986));
   }
-  return createPolylineRoute(points, TUNNEL_DURATION, createDistanceTable);
+  return createPolylineRoute(points, TUNNEL_DURATION, (totalLength) => createDistanceTable(totalLength, entryVelocity));
 }
 
 function createPolylineRoute(points, duration, distanceTableFactory = null) {
@@ -176,6 +183,7 @@ function createPolylineRoute(points, duration, distanceTableFactory = null) {
   };
 
   return {
+    length: totalLength,
     endPosition: points.at(-1).clone(),
     positionAt,
     tangentAt(time) {
@@ -194,17 +202,42 @@ function createPolylineRoute(points, duration, distanceTableFactory = null) {
   };
 }
 
-function createDistanceTable(totalLength) {
-  const intervals = 240;
+function createDistanceTable(totalLength, entryVelocity) {
+  const intervals = 480;
+  const step = TUNNEL_DURATION / intervals;
+  const baseIntegral = integrate(intervals, step, (time) => getTunnelSpeed(time));
+  const carryIntegral = integrate(intervals, step, (time) => momentumCarry(time));
+  const baseEntrySpeed = getTunnelSpeed(0);
+  // Keep the route duration at 60 seconds while making the first tunnel
+  // velocity exactly equal to the velocity at the end of the suction path.
+  const baseScale = (totalLength - entryVelocity * carryIntegral)
+    / Math.max(baseIntegral - baseEntrySpeed * carryIntegral, 0.0001);
+  const speedAt = (time) => {
+    const baseSpeed = getTunnelSpeed(time) * baseScale;
+    return baseSpeed + (entryVelocity - baseEntrySpeed * baseScale) * momentumCarry(time);
+  };
   const values = [0];
   let accumulated = 0;
   for (let index = 1; index <= intervals; index += 1) {
-    const time = index / intervals * TUNNEL_DURATION;
-    const acceleration = smoothstep(time / ACCELERATION_DURATION);
-    accumulated += getTunnelSpeed(time) * acceleration * (TUNNEL_DURATION / intervals);
+    accumulated += speedAt((index - 0.5) * step) * step;
     values.push(accumulated);
   }
-  return values.map((value, index) => ({ time: index / intervals * TUNNEL_DURATION, distance: value / accumulated * totalLength }));
+  return values.map((value, index) => ({ time: index * step, distance: value / accumulated * totalLength }));
+}
+
+function integrate(intervals, step, valueAt) {
+  let total = 0;
+  for (let index = 0; index < intervals; index += 1) {
+    total += valueAt((index + 0.5) * step) * step;
+  }
+  return total;
+}
+
+function momentumCarry(time) {
+  const amount = BABYLON.Scalar.Clamp(time / MOMENTUM_SETTLE_DURATION, 0, 1);
+  // A gentle quadratic release keeps almost all of the threshold velocity for
+  // the first seconds, then settles naturally into the early tunnel pace.
+  return 1 - amount * amount;
 }
 
 function sampleDistance(table, time) {
