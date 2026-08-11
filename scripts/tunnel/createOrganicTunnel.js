@@ -3,19 +3,13 @@ import {
   getTunnelDiameter,
   getTunnelLook,
   getTunnelPhase,
+  getTunnelTwitchInterval,
 } from "./tunnelConfig.js";
 import { createTunnelFloor } from "./createTunnelFloor.js";
 
 const EYE_HEIGHT = 1.65;
 const PATH_SAMPLES = 188;
 const PROFILE_SIDES = 26;
-// Deterministic clusters let the body-like and air-pressure systems fall out
-// of sync without allocating a random effect on every frame.
-const PULSE_SCHEDULE = [
-  3.8, 8.8, 12.4, 15.1, 17.3, 19.4, 21.2, 23.8, 25.1, 27.6,
-  30.3, 31.1, 32.4, 34.9, 36.0, 37.8, 39.2, 40.0, 41.3, 42.5,
-  43.1, 44.4, 45.0, 46.2, 47.5, 48.0, 49.3, 50.1, 51.5, 53.6, 56.8,
-];
 
 /**
  * Builds one continuous, inward-facing biomorphic shell along a non-linear
@@ -49,7 +43,7 @@ export function createOrganicTunnel(scene, options) {
     ...details.litMeshes,
   ];
   const lights = createTunnelLights(scene, litMeshes, route);
-  let nextImpulseIndex = 0;
+  let nextImpulseAt = 6.8;
   let impulse = 0;
   let impulseProgress = 0;
   let exitGlow = 0;
@@ -87,11 +81,13 @@ export function createOrganicTunnel(scene, options) {
       sequenceActive = true;
       activeTime = BABYLON.Scalar.Clamp(tunnelTime, 0, TUNNEL_DURATION);
       const look = getTunnelLook(activeTime);
-      if (nextImpulseIndex < PULSE_SCHEDULE.length && activeTime >= PULSE_SCHEDULE[nextImpulseIndex]) {
+      if (activeTime >= nextImpulseAt) {
         impulse = 1;
         impulseProgress = activeTime / TUNNEL_DURATION;
-        options.onPulse?.(look.pulse);
-        nextImpulseIndex += 1;
+        // Irrational-looking, deterministic intervals keep impulses rare and
+        // non-musical without a per-frame random system.
+        const interval = getTunnelTwitchInterval(activeTime);
+        nextImpulseAt += interval > 0 ? interval * (0.72 + ((nextImpulseAt * 1.73) % 0.58)) : 9;
       }
       shell.updateDeformation(impulseProgress, impulse, look);
       details.update(activeTime, impulse, impulseProgress, 0);
@@ -103,7 +99,6 @@ export function createOrganicTunnel(scene, options) {
       if (!active) {
         activeTime = 0;
         impulse = 0;
-        nextImpulseIndex = 0;
         shell.updateDeformation(0, 0, getTunnelLook(0));
         details.update(0, 0, 0, 0);
         materials.updateSurface(0, 0);
@@ -136,15 +131,15 @@ function createTunnelRoute(entrance) {
   };
 
   const controls = [
-    fromEntrance(0, 0, 0),
-    fromEntrance(14, -0.5, 0.03),
-    fromEntrance(30, -1.2, -0.05),
-    fromEntrance(48, -0.35, -0.1),
-    fromEntrance(65, 1.05, -0.02),
-    fromEntrance(80, 0.8, 0.12),
-    fromEntrance(94, -0.2, 0.23),
-    fromEntrance(100, 0.08, 0.3),
-    fromEntrance(104, 0.3, 0.34),
+    fromEntrance(5.0, 0, 0),
+    fromEntrance(13, -0.7, 0.04),
+    fromEntrance(23, -1.9, -0.08),
+    fromEntrance(34, -0.8, -0.14),
+    fromEntrance(45, 1.5, -0.04),
+    fromEntrance(55, 1.2, 0.18),
+    fromEntrance(62, -0.3, 0.28),
+    fromEntrance(65, 0.15, 0.38),
+    fromEntrance(66, 0.4, 0.42),
   ];
   const samples = [];
   let totalLength = 0;
@@ -447,7 +442,7 @@ function surfaceTextureProfile(phase, textureSets) {
     PHYSICAL_ACTIVATION: { textureSet: textureSets.base, normalLevel: 0.14, roughness: 0.89 },
     FEEDBACK_LOOP: { textureSet: textureSets.base, normalLevel: 0.19, roughness: 0.85 },
     PANIC_PEAK: { textureSet: textureSets.deep, normalLevel: 0.25, roughness: 0.8 },
-    EXHAUSTION: { textureSet: textureSets.organic, normalLevel: 0.14, roughness: 0.88 },
+    DECLINE: { textureSet: textureSets.organic, normalLevel: 0.14, roughness: 0.88 },
   };
   return profiles[phase] ?? profiles.FIRST_UNEASE;
 }
@@ -644,7 +639,7 @@ function updateTunnelLights(lights, time, impulse, exitGlow = 0) {
   lights.fill.intensity = 0.11 + look.light * 0.24;
   lights.points.forEach((light, index) => {
     const proximity = 1 - Math.min(1, Math.abs(index / (lights.points.length - 1) - time / TUNNEL_DURATION) * 2.6);
-    const pulse = impulse * look.pulse * (0.05 + proximity * 0.16);
+    const pulse = index === 2 ? impulse * 0.16 : 0;
     const exitBleed = index === lights.points.length - 1 ? exitGlow * 1.35 : 0;
     light.intensity = (0.52 + proximity * 0.94) * look.light + pulse + exitBleed;
     light.diffuse = BABYLON.Color3.FromHexString(phase.id === "PANIC_PEAK" && index >= 3 ? "#5b606a" : "#d5d8dd");

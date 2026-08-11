@@ -1,19 +1,18 @@
 export const TUNNEL_DURATION = 60;
 
 export const TUNNEL_PHASES = [
-  { id: "FIRST_UNEASE", start: 0, end: 8, diameter: 3.5, detail: 0.14, light: 0.88, pulse: 0.16, unreality: 0.02 },
-  { id: "BODY_ALARM", start: 8, end: 18, diameter: 3.1, detail: 0.31, light: 0.62, pulse: 0.44, unreality: 0.1 },
-  { id: "FEEDBACK_LOOP", start: 18, end: 30, diameter: 2.55, detail: 0.58, light: 0.42, pulse: 0.7, unreality: 0.3 },
-  { id: "LOSS_OF_CONTROL", start: 30, end: 42, diameter: 2.02, detail: 0.78, light: 0.29, pulse: 0.92, unreality: 0.58 },
-  { id: "PANIC_PEAK", start: 42, end: 53, diameter: 1.68, detail: 1, light: 0.2, pulse: 1, unreality: 0.94 },
-  { id: "EXHAUSTION", start: 53, end: 60, diameter: 1.5, detail: 0.38, light: 0.5, pulse: 0.07, unreality: 0.06 },
+  { id: "FIRST_UNEASE", start: 0, end: 10, diameter: 5.0, detail: 0.1, light: 0.9, pulse: 0.12, unreality: 0, twitchEvery: 8.6 },
+  { id: "PHYSICAL_ACTIVATION", start: 10, end: 22, diameter: 4.05, detail: 0.26, light: 0.68, pulse: 0.32, unreality: 0.08, twitchEvery: 6.7 },
+  { id: "FEEDBACK_LOOP", start: 22, end: 38, diameter: 2.4, detail: 0.52, light: 0.46, pulse: 0.64, unreality: 0.28, twitchEvery: 4.15 },
+  { id: "PANIC_PEAK", start: 38, end: 52, diameter: 1.88, detail: 0.86, light: 0.28, pulse: 1, unreality: 0.76, twitchEvery: 2.45 },
+  { id: "DECLINE", start: 52, end: 60, diameter: 1.5, detail: 0.42, light: 0.48, pulse: 0.08, unreality: 0.08, twitchEvery: 7.8 },
 ];
 
 // Small releases stop the narrowing from becoming a mechanically linear ramp.
 const DIAMETER_KEYS = [
-  [0, 3.5], [8, 3.1], [14, 2.86], [18, 2.55], [24, 2.4],
-  [28, 2.58], [30, 2.22], [37, 2.02], [42, 1.82], [48, 1.68],
-  [53, 1.62], [56, 1.7], [60, 1.5],
+  [0, 5.0], [10, 4.05], [16, 3.6], [22, 2.9], [28, 2.7],
+  [31, 2.48], [34, 2.68], [38, 2.12], [45, 1.88], [52, 1.74],
+  [56, 1.65], [60, 1.5],
 ];
 
 export function getTunnelPhase(time) {
@@ -33,6 +32,10 @@ export function getTunnelLook(time) {
     pulse: phase.pulse,
     unreality: phase.unreality,
   };
+}
+
+export function getTunnelTwitchInterval(time) {
+  return getTunnelPhase(time).twitchEvery;
 }
 
 function interpolateKeys(keys, time) {

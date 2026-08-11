@@ -14,12 +14,10 @@ export async function createIdyllScene(engine, canvas) {
 
   const environment = await createIdyllEnvironment(scene);
   const desktopCamera = createDesktopCamera(scene, canvas, environment.startPosition);
-  let tunnelAmbience = null;
   const tunnel = createOrganicTunnel(scene, {
     entrance: environment.architecture.entrance,
     grassMaterial: environment.materials.terrain,
     getGroundHeight: environment.terrain.getGroundHeight,
-    onPulse: (strength) => tunnelAmbience?.pulse(strength),
   });
   clearTunnelTerrain(
     [environment.terrain.terrain, environment.terrain.distantHorizon],
@@ -34,7 +32,7 @@ export async function createIdyllScene(engine, canvas) {
   exitDirection.normalize();
   const whiteRoom = createWhiteRoom(scene, tunnelExit, exitDirection);
   const whiteRoomTone = createWhiteRoomTone();
-  tunnelAmbience = createTunnelAmbience();
+  const tunnelAmbience = createTunnelAmbience();
   const transition = createIdyllTunnelTransition(scene, {
     startPosition: environment.startPosition,
     entrance: environment.architecture.entrance,
