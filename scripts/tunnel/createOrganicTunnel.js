@@ -128,13 +128,13 @@ function createTunnelRoute(entrance) {
 
   const controls = [
     fromEntrance(5.0, 0, 0),
-    fromEntrance(11, -2.8, 0.08),
-    fromEntrance(20, 3.4, -0.22),
-    fromEntrance(29, -4.2, -0.48),
-    fromEntrance(38, 3.5, -0.24),
-    fromEntrance(47, -3.6, 0.06),
-    fromEntrance(55, 2.6, 0.42),
-    fromEntrance(61, -1.2, 1.18),
+    fromEntrance(13, -0.7, 0.04),
+    fromEntrance(23, -1.9, -0.08),
+    fromEntrance(34, -0.8, -0.14),
+    fromEntrance(45, 1.5, -0.04),
+    fromEntrance(55, 1.2, 0.18),
+    fromEntrance(62, -0.3, 0.58),
+    fromEntrance(65, 0.15, 1.42),
     fromEntrance(66, 0.4, 3.05),
   ];
   const samples = [];
@@ -317,11 +317,11 @@ function pushTunnelColor(target, time, angle, progress, look) {
   const progression = smoothstep((time - 4) / 49);
   const base = BABYLON.Color3.Lerp(entryMineral, charcoal, progression);
   const groove = Math.pow(Math.max(0, Math.sin(progress * 53 + angle * 1.48 + Math.sin(progress * 17) * 1.9)), 14);
-  const redAmount = groove * look.red * 0.52;
+  const grooveAmount = groove * (0.08 + look.detail * 0.16);
   target.push(
-    BABYLON.Scalar.Lerp(base.r, 0.3, redAmount),
-    BABYLON.Scalar.Lerp(base.g, 0.025, redAmount),
-    BABYLON.Scalar.Lerp(base.b, 0.04, redAmount),
+    BABYLON.Scalar.Lerp(base.r, base.r * 0.48, grooveAmount),
+    BABYLON.Scalar.Lerp(base.g, base.g * 0.48, grooveAmount),
+    BABYLON.Scalar.Lerp(base.b, base.b * 0.54, grooveAmount),
     1,
   );
 }
@@ -373,15 +373,15 @@ function createTunnelMaterials(scene) {
   ridge.environmentIntensity = 0.2;
   ridge.specularIntensity = 0.3;
 
-  const red = createDarkMaterial(
-    "organic-tunnel-embedded-crimson",
-    BABYLON.Color3.FromHexString("#26090c"),
+  const groove = createDarkMaterial(
+    "organic-tunnel-embedded-groove",
+    BABYLON.Color3.FromHexString("#15181d"),
     0.73,
     textureSets.base,
     0.08,
   );
-  red.bumpTexture.level = 0.08;
-  red.emissiveColor = BABYLON.Color3.FromHexString("#050001");
+  groove.bumpTexture.level = 0.08;
+  groove.emissiveColor = BABYLON.Color3.FromHexString("#020304");
 
   const membrane = createDarkMaterial(
     "organic-tunnel-translucent-membrane",
@@ -404,7 +404,7 @@ function createTunnelMaterials(scene) {
     surface,
     floor,
     ridge,
-    red,
+    groove,
     membrane,
     particle,
     updateSurface(time) {
@@ -419,7 +419,7 @@ function createTunnelMaterials(scene) {
       surface.roughness = profile.roughness;
     },
     dispose() {
-      [surface, floor, ridge, red, membrane, particle].forEach((material) => material.dispose());
+      [surface, floor, ridge, groove, membrane, particle].forEach((material) => material.dispose());
     },
   };
 }
@@ -504,9 +504,9 @@ function createOtherworldlyDetails(scene, route, materials) {
     [0.69, 0.68, 0.66], [0.79, 2.91, 0.94], [0.88, 5.02, 0.54],
   ];
   channelDefinitions.forEach(([progress, angle, span], index) => {
-    const material = materials.red.clone(`organic-tunnel-internal-crimson-${index}`);
-    material.albedoColor = BABYLON.Color3.FromHexString("#210609");
-    material.emissiveColor = BABYLON.Color3.FromHexString("#040001");
+    const material = materials.groove.clone(`organic-tunnel-internal-groove-${index}`);
+    material.albedoColor = BABYLON.Color3.FromHexString("#12151a");
+    material.emissiveColor = BABYLON.Color3.FromHexString("#020304");
     disposableMaterials.push(material);
     const mesh = createLongitudinalGroove(scene, route, progress, angle, span, index);
     mesh.material = material;
@@ -563,9 +563,9 @@ function createOtherworldlyDetails(scene, route, materials) {
         const passingPulse = localPulse(time, progress * TUNNEL_DURATION, 1.15);
         const impulsePulse = Math.exp(-Math.pow((progress - impulseProgress) / 0.055, 2)) * impulse;
         const glow = otherness * 0.045 + passingPulse * 0.15 + impulsePulse * 0.09;
-        material.emissiveColor.r = glow * 1.35;
-        material.emissiveColor.g = glow * 0.018;
-        material.emissiveColor.b = glow * 0.036;
+        material.emissiveColor.r = glow * 0.34;
+        material.emissiveColor.g = glow * 0.38;
+        material.emissiveColor.b = glow * 0.44;
       });
       ribs.forEach(({ material, progress }) => {
         const response = Math.exp(-Math.pow((progress - impulseProgress) / 0.042, 2)) * impulse;
@@ -704,7 +704,7 @@ function createTunnelLights(scene, meshes, route) {
   });
   const fill = new BABYLON.HemisphericLight("organic-tunnel-low-fill", BABYLON.Axis.Y, scene);
   fill.diffuse = BABYLON.Color3.FromHexString("#aeb7c4");
-  fill.groundColor = BABYLON.Color3.FromHexString("#321d26");
+  fill.groundColor = BABYLON.Color3.FromHexString("#171a20");
   fill.intensity = 0.27;
   fill.includedOnlyMeshes.push(...meshes);
   return { points, fill };
@@ -718,9 +718,7 @@ function updateTunnelLights(lights, time, impulse) {
     const proximity = 1 - Math.min(1, Math.abs(index / (lights.points.length - 1) - time / TUNNEL_DURATION) * 2.6);
     const pulse = index === 2 ? impulse * 0.16 : 0;
     light.intensity = (0.52 + proximity * 0.94) * look.light + pulse;
-    if (phase.id === "PEAK" && index >= 3) {
-      light.diffuse = BABYLON.Color3.FromHexString("#67252b");
-    }
+    light.diffuse = BABYLON.Color3.FromHexString(phase.id === "PEAK" && index >= 3 ? "#5b606a" : "#d5d8dd");
   });
 }
 
