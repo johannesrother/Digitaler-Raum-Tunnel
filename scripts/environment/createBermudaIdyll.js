@@ -10,7 +10,7 @@ export async function createBermudaIdyll(scene, startPosition) {
   const world = new BABYLON.TransformNode("bermuda-idyll-world", scene);
   const panorama = createVondelparkPanorama(scene);
   panorama.parent = world;
-  const ground = createMeadowGround(scene);
+  const ground = createMeadowGround(scene, startPosition);
   ground.parent = world;
   const grass = await createBermudaGrass(scene, world, startPosition);
   const flowers = await createFlowerGroups(scene, world);
@@ -70,7 +70,7 @@ function createVondelparkPanorama(scene) {
   return panorama;
 }
 
-function createMeadowGround(scene) {
+function createMeadowGround(scene, startPosition) {
   const ground = BABYLON.MeshBuilder.CreateGround(
     "bermuda-meadow-ground",
     { width: MEADOW_RADIUS * 2, height: MEADOW_RADIUS * 2, subdivisions: 48 },
@@ -93,6 +93,7 @@ function createMeadowGround(scene) {
   material.roughness = 0.9;
   material.environmentIntensity = 0.34;
   ground.material = material;
+  ground.position.set(startPosition.x, 0, startPosition.z);
   ground.isPickable = false;
   ground.receiveShadows = true;
   return ground;
