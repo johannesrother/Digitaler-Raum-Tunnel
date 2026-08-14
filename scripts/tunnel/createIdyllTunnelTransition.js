@@ -26,7 +26,7 @@ export function createIdyllTunnelTransition(scene, options) {
   const entry = createEntryPath(start, options.entrance, options.initialForward, options.tunnel.route.start);
   const tunnelRoute = createTunnelTravelRoute(entry, options.tunnel.route, options.entrance.center);
   const tunnelWorld = createTunnelWorldGroup(options);
-  const rift = createSpacetimeRift(scene, options.entrance, options.tunnel.route.start);
+  const rift = createSpacetimeRift(scene, options.entrance, options.tunnel.route.start, options.tunnel.mesh);
   const riftApproachTime = Math.max(0.5, tunnelRoute.entryTime - RIFT_APPROACH_REMAINING_TIME);
   const debug = createDebugPanel();
   let elapsed = 0;
@@ -276,60 +276,122 @@ function riftPullProgress(time, route, approachTime) {
     + (progress ** 3 - progress ** 2) * endSlope;
 }
 
-function createSpacetimeRift(scene, entrance, tunnelStart) {
-  const segments = 52;
+function createSpacetimeRift(scene, entrance, tunnelStart, tunnelMesh) {
+  const segments = 18;
   const center = tunnelStart.add(new BABYLON.Vector3(0, 1.65, 0));
   const lateral = entrance.lateral.clone();
-  const positions = [];
-  const indices = [];
-  const shape = Array.from({ length: segments + 1 }, (_, index) => {
-    const angle = index / segments * Math.PI * 2;
-    return {
-      angle,
-      inner: 1 + Math.sin(angle * 3.1 + 0.4) * 0.08 + Math.sin(angle * 7.2 - 0.7) * 0.035,
-      rim: 0.13 + Math.sin(angle * 4.6 - 0.3) * 0.035,
-    };
-  });
-  shape.forEach(() => positions.push(0, 0, 0, 0, 0, 0));
-  for (let index = 0; index < segments; index += 1) {
-    const first = index * 2;
-    indices.push(first, first + 1, first + 2, first + 1, first + 3, first + 2);
-  }
-  const mesh = new BABYLON.Mesh("spacetime-rift-edge", scene);
-  const vertexData = new BABYLON.VertexData();
-  vertexData.positions = positions;
-  vertexData.indices = indices;
-  vertexData.normals = [];
-  BABYLON.VertexData.ComputeNormals(positions, indices, vertexData.normals);
-  vertexData.applyToMesh(mesh);
-  const material = new BABYLON.StandardMaterial("spacetime-rift-edge-material", scene);
-  material.diffuseColor = BABYLON.Color3.FromHexString("#120f13");
-  material.emissiveColor = BABYLON.Color3.FromHexString("#2a1c24");
-  material.specularColor = BABYLON.Color3.Black();
-  material.backFaceCulling = false;
-  material.alpha = 0;
-  mesh.material = material;
-  mesh.isPickable = false;
-  mesh.setEnabled(false);
+  const forward = entrance.forward.clone();
+  const edgeMaterial = new BABYLON.StandardMaterial("spacetime-rift-torn-edge-material", scene);
+  edgeMaterial.diffuseColor = BABYLON.Color3.FromHexString("#f0d8c8");
+  edgeMaterial.emissiveColor = BABYLON.Color3.FromHexString("#b48b87");
+  edgeMaterial.specularColor = BABYLON.Color3.Black();
+  edgeMaterial.backFaceCulling = false;
+  edgeMaterial.disableLighting = true;
+  const creviceMaterial = new BABYLON.StandardMaterial("spacetime-rift-crevice-material", scene);
+  creviceMaterial.diffuseColor = BABYLON.Color3.FromHexString("#050407");
+  creviceMaterial.emissiveColor = BABYLON.Color3.FromHexString("#09070d");
+  creviceMaterial.specularColor = BABYLON.Color3.Black();
+  creviceMaterial.backFaceCulling = false;
+  const maskMaterial = new BABYLON.StandardMaterial("spacetime-rift-stencil-mask-material", scene);
+  maskMaterial.backFaceCulling = false;
+  maskMaterial.disableColorWrite = true;
+  maskMaterial.disableDepthWrite = true;
+  maskMaterial.stencil.enabled = true;
+  maskMaterial.stencil.func = BABYLON.Engine.ALWAYS;
+  maskMaterial.stencil.funcRef = 1;
+  maskMaterial.stencil.funcMask = 0xff;
+  maskMaterial.stencil.opStencilFail = BABYLON.Engine.KEEP;
+  maskMaterial.stencil.opDepthFail = BABYLON.Engine.KEEP;
+  maskMaterial.stencil.opStencilDepthPass = BABYLON.Engine.REPLACE;
+  const left = createTornEdgeMesh(scene, "spacetime-rift-left-torn-edge", edgeMaterial, segments);
+  const right = createTornEdgeMesh(scene, "spacetime-rift-right-torn-edge", edgeMaterial, segments);
+  const crevice = createRiftCrevice(scene, segments, creviceMaterial);
+  const apertureMask = createRiftCrevice(scene, segments, maskMaterial, "spacetime-rift-opening-stencil-mask");
+  apertureMask.mesh.setEnabled(false);
+  const fractures = createRiftFractures(scene, center, lateral, forward, creviceMaterial);
+  const tunnelMaterial = tunnelMesh.material;
+  const originalRenderGroup = tunnelMesh.renderingGroupId;
+  const originalStencil = {
+    enabled: tunnelMaterial.stencil.enabled,
+    func: tunnelMaterial.stencil.func,
+    funcRef: tunnelMaterial.stencil.funcRef,
+    funcMask: tunnelMaterial.stencil.funcMask,
+    opStencilFail: tunnelMaterial.stencil.opStencilFail,
+    opDepthFail: tunnelMaterial.stencil.opDepthFail,
+    opStencilDepthPass: tunnelMaterial.stencil.opStencilDepthPass,
+  };
+  let maskEnabled = false;
+  [left.mesh, right.mesh, crevice.mesh, ...fractures].forEach((mesh) => { mesh.renderingGroupId = 2; });
+  apertureMask.mesh.renderingGroupId = 0;
 
-  const updateVertices = (elapsed, width, height) => {
-    shape.forEach((point, index) => {
-      const wobble = Math.sin(elapsed * 2.3 + point.angle * 5.4) * 0.025;
-      const innerWidth = 1.72 * point.inner * width;
-      const innerHeight = 1.92 * point.inner * height;
-      const outerWidth = (1.72 * point.inner + point.rim) * width;
-      const outerHeight = (1.92 * point.inner + point.rim * 1.15) * height;
-      const writePoint = (vertex, radialWidth, radialHeight) => {
-        const x = Math.cos(point.angle) * radialWidth;
-        const y = Math.sin(point.angle) * radialHeight + wobble * height;
-        positions[vertex] = center.x + lateral.x * x;
-        positions[vertex + 1] = center.y + y;
-        positions[vertex + 2] = center.z + lateral.z * x;
-      };
-      writePoint(index * 6, outerWidth, outerHeight);
-      writePoint(index * 6 + 3, innerWidth, innerHeight);
-    });
-    mesh.updateVerticesData(BABYLON.VertexBuffer.PositionKind, positions);
+  const setTunnelMask = (enabled) => {
+    if (enabled === maskEnabled) {
+      return;
+    }
+    maskEnabled = enabled;
+    apertureMask.mesh.setEnabled(enabled);
+    if (enabled) {
+      // The stencil mask is drawn in group 0. Preserve its stencil values
+      // into group 1, where the real tunnel is tested against that opening.
+      scene.setRenderingAutoClearDepthStencil(1, false, false, false);
+      tunnelMesh.renderingGroupId = 1;
+      tunnelMaterial.stencil.enabled = true;
+      tunnelMaterial.stencil.func = BABYLON.Engine.EQUAL;
+      tunnelMaterial.stencil.funcRef = 1;
+      tunnelMaterial.stencil.funcMask = 0xff;
+      tunnelMaterial.stencil.opStencilFail = BABYLON.Engine.KEEP;
+      tunnelMaterial.stencil.opDepthFail = BABYLON.Engine.KEEP;
+      tunnelMaterial.stencil.opStencilDepthPass = BABYLON.Engine.KEEP;
+      return;
+    }
+    scene.setRenderingAutoClearDepthStencil(1, true, true, true);
+    tunnelMesh.renderingGroupId = originalRenderGroup;
+    Object.assign(tunnelMaterial.stencil, originalStencil);
+  };
+
+  const setPoint = (positions, offset, x, y, depth) => {
+    positions[offset] = center.x + lateral.x * x + forward.x * depth;
+    positions[offset + 1] = center.y + y;
+    positions[offset + 2] = center.z + lateral.z * x + forward.z * depth;
+  };
+  const updateEdge = (edge, side, elapsed, formation, opening, closure) => {
+    const halfHeight = (0.08 + formation * 1.72) * closure;
+    const positions = edge.positions;
+    for (let index = 0; index <= segments; index += 1) {
+      const amount = index / segments;
+      const taper = Math.sin(amount * Math.PI) ** 0.46;
+      const irregular = (Math.sin(amount * 17.3 + side * 1.8) * 0.075
+        + Math.sin(amount * 31.2 - side * 0.5) * 0.032) * formation;
+      const wobble = Math.sin(elapsed * 2.25 + amount * 9.1 + side) * 0.026 * opening;
+      const gap = (0.018 + 0.73 * opening * taper) * closure;
+      const inner = side * gap + irregular + wobble;
+      const outer = inner + side * (0.18 + Math.sin(amount * 8.7 + side) * 0.04) * formation * closure;
+      const y = (amount - 0.5) * halfHeight * 2 + Math.sin(amount * 13.5 + side) * 0.045 * formation;
+      const vertex = index * 12;
+      setPoint(positions, vertex, inner, y, -0.11);
+      setPoint(positions, vertex + 3, outer, y + Math.sin(amount * 5.2) * 0.035, -0.11);
+      setPoint(positions, vertex + 6, inner, y, 0.17);
+      setPoint(positions, vertex + 9, outer, y + Math.sin(amount * 5.2) * 0.035, 0.17);
+    }
+    edge.mesh.updateVerticesData(BABYLON.VertexBuffer.PositionKind, positions, true);
+  };
+  const updateCrevice = (elapsed, formation, opening, closure) => {
+    const halfHeight = (0.08 + formation * 1.72) * closure;
+    const positions = crevice.positions;
+    for (let index = 0; index <= segments; index += 1) {
+      const amount = index / segments;
+      const taper = Math.sin(amount * Math.PI) ** 0.46;
+      const gap = (0.018 + 0.73 * opening * taper) * closure;
+      const y = (amount - 0.5) * halfHeight * 2;
+      const leftJitter = Math.sin(amount * 17.3 - 1.8) * 0.075 * formation;
+      const rightJitter = Math.sin(amount * 17.3 + 1.8) * 0.075 * formation;
+      setPoint(positions, index * 6, -gap + leftJitter, y, -0.125);
+      setPoint(positions, index * 6 + 3, gap + rightJitter, y, -0.125);
+    }
+    crevice.mesh.updateVerticesData(BABYLON.VertexBuffer.PositionKind, positions, true);
+    positions.forEach((value, index) => { apertureMask.positions[index] = value; });
+    apertureMask.mesh.updateVerticesData(BABYLON.VertexBuffer.PositionKind, apertureMask.positions, true);
+    crevice.mesh.visibility = BABYLON.Scalar.Clamp(1 - opening * 1.12, 0, 1);
   };
 
   return {
@@ -337,21 +399,104 @@ function createSpacetimeRift(scene, entrance, tunnelStart) {
       const isClosing = tunnelTime >= 0;
       const closure = isClosing ? 1 - smoothstep(tunnelTime / RIFT_CLOSE_DURATION) : 1;
       if (formation <= 0 || closure <= 0.01) {
-        mesh.setEnabled(false);
+        setTunnelMask(false);
+        left.mesh.setEnabled(false);
+        right.mesh.setEnabled(false);
+        crevice.mesh.setEnabled(false);
+        apertureMask.mesh.setEnabled(false);
+        fractures.forEach((mesh) => mesh.setEnabled(false));
         return;
       }
-      const opening = smoothstep((elapsed - 18) / 2);
-      const width = (0.035 + opening * 0.965) * closure;
-      const height = (0.18 + formation * 0.82) * closure;
-      updateVertices(elapsed, width, height);
-      material.alpha = (0.22 + reveal * 0.62) * closure;
-      mesh.setEnabled(true);
+      const opening = smoothstep((elapsed - RIFT_TUNNEL_REVEAL_START) / (IDYLL_TRAVEL_DURATION - RIFT_TUNNEL_REVEAL_START));
+      updateEdge(left, -1, elapsed, formation, opening, closure);
+      updateEdge(right, 1, elapsed, formation, opening, closure);
+      updateCrevice(elapsed, formation, opening, closure);
+      setTunnelMask(reveal > 0.01 && !isClosing);
+      left.mesh.setEnabled(true);
+      right.mesh.setEnabled(true);
+      crevice.mesh.setEnabled(true);
+      fractures.forEach((mesh) => {
+        mesh.visibility = BABYLON.Scalar.Clamp((1 - opening * 1.6) * formation * 1.7, 0, 0.9);
+        mesh.setEnabled(mesh.visibility > 0.01);
+      });
     },
     dispose() {
-      material.dispose();
-      mesh.dispose();
+      fractures.forEach((mesh) => mesh.dispose());
+      left.mesh.dispose();
+      right.mesh.dispose();
+      crevice.mesh.dispose();
+      setTunnelMask(false);
+      apertureMask.mesh.dispose();
+      edgeMaterial.dispose();
+      creviceMaterial.dispose();
+      maskMaterial.dispose();
     },
   };
+}
+
+function createTornEdgeMesh(scene, name, material, segments) {
+  const positions = Array((segments + 1) * 12).fill(0);
+  const indices = [];
+  for (let index = 0; index < segments; index += 1) {
+    const current = index * 4;
+    const next = current + 4;
+    indices.push(
+      current, next, next + 1, current, next + 1, current + 1,
+      current + 2, current + 3, next + 3, current + 2, next + 3, next + 2,
+      current + 1, next + 1, next + 3, current + 1, next + 3, current + 3,
+      current, current + 2, next + 2, current, next + 2, next,
+    );
+  }
+  const mesh = new BABYLON.Mesh(name, scene);
+  const vertexData = new BABYLON.VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = [];
+  BABYLON.VertexData.ComputeNormals(positions, indices, vertexData.normals);
+  vertexData.applyToMesh(mesh, true);
+  mesh.material = material;
+  mesh.isPickable = false;
+  return { mesh, positions };
+}
+
+function createRiftCrevice(scene, segments, material, name = "spacetime-rift-dark-crevice") {
+  const positions = Array((segments + 1) * 6).fill(0);
+  const indices = [];
+  for (let index = 0; index < segments; index += 1) {
+    const current = index * 2;
+    const next = current + 2;
+    indices.push(current, next, next + 1, current, next + 1, current + 1);
+  }
+  const mesh = new BABYLON.Mesh(name, scene);
+  const vertexData = new BABYLON.VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = [];
+  BABYLON.VertexData.ComputeNormals(positions, indices, vertexData.normals);
+  vertexData.applyToMesh(mesh, true);
+  mesh.material = material;
+  mesh.isPickable = false;
+  return { mesh, positions };
+}
+
+function createRiftFractures(scene, center, lateral, forward, material) {
+  const makePoint = (x, y) => center.add(lateral.scale(x)).add(forward.scale(-0.135)).add(new BABYLON.Vector3(0, y, 0));
+  const branches = [
+    [[-0.02, 0.72], [-0.28, 0.88], [-0.38, 1.05]],
+    [[0.03, 0.23], [0.3, 0.39], [0.43, 0.34]],
+    [[-0.02, -0.45], [-0.24, -0.62], [-0.32, -0.81]],
+  ];
+  return branches.map((points, index) => {
+    const mesh = BABYLON.MeshBuilder.CreateTube(`spacetime-rift-fracture-${index}`, {
+      path: points.map(([x, y]) => makePoint(x, y)),
+      radius: 0.018,
+      tessellation: 4,
+      cap: BABYLON.Mesh.CAP_ALL,
+    }, scene);
+    mesh.material = material;
+    mesh.isPickable = false;
+    return mesh;
+  });
 }
 
 function activateWhiteRoom(options, root) {
