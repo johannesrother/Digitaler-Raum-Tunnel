@@ -361,6 +361,7 @@ function createTunnelWorldGroup(options) {
       // renderable dimension from inside the tunnel, including through the
       // later White-Room sightline.
       options.idyllWorldMeshes.forEach((mesh) => mesh.setEnabled(false));
+      options.onIdyllHidden?.();
     },
   };
 }

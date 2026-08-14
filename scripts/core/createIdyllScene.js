@@ -1,6 +1,6 @@
 import { createDesktopCamera } from "../camera/createDesktopCamera.js";
 import { createIdyllEnvironment } from "../environment/createIdyllEnvironment.js";
-import { createGlbIdyll } from "../environment/createGlbIdyll.js";
+import { createBermudaIdyll } from "../environment/createBermudaIdyll.js";
 import { createOrganicTunnel } from "../tunnel/createOrganicTunnel.js";
 import { clearTunnelTerrain, removeIdyllObjectsFromTunnel } from "../tunnel/clearTunnelTerrain.js";
 import { createIdyllTunnelTransition } from "../tunnel/createIdyllTunnelTransition.js";
@@ -13,9 +13,9 @@ export async function createIdyllScene(engine, canvas) {
   scene.skipPointerMovePicking = true;
 
   const environment = await createIdyllEnvironment(scene);
-  const glbIdyll = await createGlbIdyll(scene, environment.startPosition);
+  const bermudaIdyll = await createBermudaIdyll(scene, environment.startPosition);
   disableOldIdyllVisuals(environment);
-  const desktopCamera = createDesktopCamera(scene, canvas, glbIdyll.startPosition);
+  const desktopCamera = createDesktopCamera(scene, canvas, bermudaIdyll.startPosition);
   const tunnel = createOrganicTunnel(scene, {
     entrance: environment.architecture.entrance,
     grassMaterial: environment.materials.terrain,
@@ -38,7 +38,7 @@ export async function createIdyllScene(engine, canvas) {
   const whiteRoom = createWhiteRoom(scene, tunnelExit, exitDirection);
   const whiteRoomTone = createWhiteRoomTone();
   const transition = createIdyllTunnelTransition(scene, {
-    startPosition: glbIdyll.startPosition,
+    startPosition: bermudaIdyll.startPosition,
     entrance: environment.architecture.entrance,
     desktopCamera,
     tunnel,
@@ -47,6 +47,7 @@ export async function createIdyllScene(engine, canvas) {
     initialForward: desktopCamera.getForwardRay(1).direction.clone(),
     whiteRoom,
     whiteRoomTone,
+    onIdyllHidden: () => bermudaIdyll.hide(),
     idyllWorldMeshes: scene.meshes.filter((mesh) => (
       mesh !== tunnel.mesh && mesh.name !== "white-room-endless-void"
     )),
@@ -55,7 +56,7 @@ export async function createIdyllScene(engine, canvas) {
   });
   scene.metadata = {
     environment,
-    glbIdyll,
+    bermudaIdyll,
     desktopCamera,
     tunnel,
     transition,
