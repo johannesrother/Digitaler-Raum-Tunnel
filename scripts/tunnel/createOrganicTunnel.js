@@ -52,7 +52,10 @@ export function createOrganicTunnel(scene, options) {
     },
     update(tunnelTime) {
       sequenceActive = true;
-      activeTime = BABYLON.Scalar.Clamp(tunnelTime, 0, TUNNEL_DURATION);
+      // The walls may already be visible and moving through the rift. Keep
+      // that motion continuous when the travel clock begins instead of
+      // resetting the deformation phase to zero on the crossing frame.
+      activeTime = Math.max(activeTime, BABYLON.Scalar.Clamp(tunnelTime, 0, TUNNEL_DURATION));
       const look = getTunnelLook(activeTime);
       if (activeTime >= nextImpulseAt) {
         impulse = 1;

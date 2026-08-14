@@ -12,6 +12,7 @@ const TUNNEL_START = IDYLL_TRAVEL_DURATION + RIFT_PULL_DURATION;
 const WHITE_ROOM_ARRIVAL_DURATION = 1;
 const WHITE_ROOM_DURATION = 5;
 const WHITE_PREVIEW_START = 30;
+const TUNNEL_BLEND_DURATION = 2;
 const FINAL_PULL_START = 53;
 const FINAL_PULL_DURATION = TUNNEL_DURATION - FINAL_PULL_START;
 const RIFT_APPROACH_REMAINING_TIME = 3.4;
@@ -64,6 +65,9 @@ export function createIdyllTunnelTransition(scene, options) {
     if (!portalClosed) {
       tunnelWorld.reveal(tunnelReveal);
     }
+    // Start the already visible tunnel's wall motion before the visitor
+    // crosses the rift. This avoids a second visual "start" at entry.
+    options.tunnel.setSequenceActive(tunnelReveal > 0.01 && !hasReachedWhiteRoom);
     rift.update(elapsed, riftFormation, tunnelReveal, hasEnteredTunnel ? tunnelTime : -1);
 
     if (elapsed < IDYLL_TRAVEL_DURATION) {
@@ -72,9 +76,17 @@ export function createIdyllTunnelTransition(scene, options) {
       applyPathTransform(root, tunnelRoute, riftApproachTime + (tunnelRoute.entryTime - riftApproachTime)
         * riftPullProgress(elapsed - IDYLL_TRAVEL_DURATION, tunnelRoute, riftApproachTime), initialHeading, delta);
     } else if (!hasReachedWhiteRoom) {
-      applyPathTransform(root, tunnelRoute, tunnelRoute.entryTime + finalTunnelTravelTime(tunnelTime), initialHeading, delta);
+      applyPathTransform(
+        root,
+        tunnelRoute,
+        tunnelRoute.entryTime + tunnelTravelTime(tunnelTime, tunnelRoute, riftApproachTime),
+        initialHeading,
+        delta,
+      );
       options.tunnel.update(tunnelTime);
-      if (!idyllHidden) {
+      // Keep the old world for a short overlap while the rift closes around
+      // the visitor instead of switching the environment at the crossing.
+      if (!idyllHidden && tunnelTime >= TUNNEL_BLEND_DURATION) {
         tunnelWorld.closePortal();
         portalClosed = true;
         idyllHidden = true;
@@ -101,7 +113,7 @@ export function createIdyllTunnelTransition(scene, options) {
         whiteRoomFinished = true;
       }
     }
-    debug.update(elapsed, tunnelTime, tunnelRoute, hasEnteredTunnel, riftFormation);
+    debug.update(elapsed, tunnelTime, tunnelRoute, hasEnteredTunnel, riftFormation, riftApproachTime);
   });
 
   return {
@@ -283,6 +295,45 @@ function riftPullProgress(time, route, approachTime) {
   return (progress ** 3 - 2 * progress ** 2 + progress) * startSlope
     + (-2 * progress ** 3 + 3 * progress ** 2)
     + (progress ** 3 - progress ** 2) * endSlope;
+}
+
+function riftExitSpeedMultiplier(route, approachTime) {
+  const virtualDuration = Math.max(route.entryTime - approachTime, 0.001);
+  const endSlope = BABYLON.Scalar.Clamp(RIFT_PULL_DURATION / virtualDuration, 0.2, 1.3);
+  return virtualDuration * endSlope / RIFT_PULL_DURATION;
+}
+
+function tunnelEntryBlendTime(tunnelTime, route, approachTime) {
+  if (tunnelTime >= TUNNEL_BLEND_DURATION) {
+    return tunnelTime;
+  }
+  const progress = BABYLON.Scalar.Clamp(tunnelTime / TUNNEL_BLEND_DURATION, 0, 1);
+  const initialSlope = riftExitSpeedMultiplier(route, approachTime);
+  const square = progress * progress;
+  const cube = square * progress;
+  // Cubic Hermite path time: start with the actual rift-exit velocity and
+  // settle to normal tunnel velocity after two seconds without moving the
+  // path endpoint or resetting tunnel progress.
+  return TUNNEL_BLEND_DURATION * (
+    (cube - 2 * square + progress) * initialSlope
+    + (-2 * cube + 3 * square)
+    + (cube - square)
+  );
+}
+
+function tunnelTravelTime(tunnelTime, route, approachTime) {
+  return finalTunnelTravelTime(tunnelEntryBlendTime(tunnelTime, route, approachTime));
+}
+
+function tunnelEntrySpeedMultiplier(tunnelTime, route, approachTime) {
+  if (tunnelTime >= TUNNEL_BLEND_DURATION) {
+    return 1;
+  }
+  const progress = BABYLON.Scalar.Clamp(tunnelTime / TUNNEL_BLEND_DURATION, 0, 1);
+  const initialSlope = riftExitSpeedMultiplier(route, approachTime);
+  return initialSlope * (3 * progress ** 2 - 4 * progress + 1)
+    + (-6 * progress ** 2 + 6 * progress)
+    + (3 * progress ** 2 - 2 * progress);
 }
 
 /**
@@ -578,7 +629,13 @@ function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initial
   }
   const tunnelTime = elapsed - TUNNEL_START;
   if (tunnelTime < TUNNEL_DURATION) {
-    applyPathTransform(root, tunnelRoute, tunnelRoute.entryTime + finalTunnelTravelTime(tunnelTime), initialHeading, 0);
+    applyPathTransform(
+      root,
+      tunnelRoute,
+      tunnelRoute.entryTime + tunnelTravelTime(tunnelTime, tunnelRoute, riftApproachTime),
+      initialHeading,
+      0,
+    );
     return;
   }
   root.position.copyFrom(whiteRoom.finalPosition);
@@ -610,7 +667,7 @@ function createDebugPanel() {
   panel.className = "tunnel-debug-panel";
   document.body.append(panel);
   return {
-    update(experienceTime, tunnelTime, tunnelRoute, hasEnteredTunnel, riftFormation) {
+    update(experienceTime, tunnelTime, tunnelRoute, hasEnteredTunnel, riftFormation, riftApproachTime) {
       const phase = getTunnelPhase(tunnelTime);
       const inWhiteRoom = experienceTime >= TUNNEL_START + TUNNEL_DURATION;
       const inTunnel = hasEnteredTunnel && tunnelTime < TUNNEL_DURATION;
@@ -623,7 +680,11 @@ function createDebugPanel() {
           : experienceTime >= RIFT_FORM_START
             ? "rift forming"
             : "idyll travel";
-      const currentSpeed = inTunnel ? tunnelRoute.normalTunnelSpeed * finalTunnelSpeedMultiplier(tunnelTime) : 0;
+      const currentSpeed = inTunnel
+        ? tunnelRoute.normalTunnelSpeed
+          * tunnelEntrySpeedMultiplier(tunnelTime, tunnelRoute, riftApproachTime)
+          * finalTunnelSpeedMultiplier(tunnelTime)
+        : 0;
       panel.textContent = [
         `Experience: ${experienceTime.toFixed(1)} s`,
         `Tunnel: ${tunnelTime.toFixed(1)} / ${TUNNEL_DURATION} s`,
@@ -632,7 +693,7 @@ function createDebugPanel() {
         `Rift: ${(riftFormation * 100).toFixed(0)} %`,
         `Phase: ${phase.id}`,
         `Progress: ${(tunnelTime / TUNNEL_DURATION * 100).toFixed(0)} %`,
-        `Tunnel path: ${(inTunnel ? finalTunnelTravelTime(tunnelTime) * tunnelRoute.normalTunnelSpeed : 0).toFixed(1)} m`,
+        `Tunnel path: ${(inTunnel ? tunnelTravelTime(tunnelTime, tunnelRoute, riftApproachTime) * tunnelRoute.normalTunnelSpeed : 0).toFixed(1)} m`,
         `Diameter: ${getTunnelDiameter(tunnelTime).toFixed(2)} m`,
       ].join("\n");
     },
