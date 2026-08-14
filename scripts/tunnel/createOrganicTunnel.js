@@ -182,10 +182,9 @@ function createTunnelShell(scene, route) {
       const angle = (side / PROFILE_SIDES) * Math.PI * 2;
       const profile = organicProfile(angle, progress, look.detail);
       const radius = diameter * 0.5 * profile;
-      const lowerFlatten = Math.max(0, -Math.sin(angle)) * radius * 0.12;
       const point = center
         .add(lateral.scale(Math.cos(angle) * radius * (1 + Math.sin(angle + progress * 5.2) * 0.045)))
-        .add(vertical.scale(Math.sin(angle) * radius - lowerFlatten));
+        .add(vertical.scale(Math.sin(angle) * radius));
       positions.push(point.x, point.y, point.z);
       deformationVertices.push({
         angle,

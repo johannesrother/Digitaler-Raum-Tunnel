@@ -19,7 +19,11 @@ export async function createIdyllScene(engine, canvas) {
     getGroundHeight: environment.terrain.getGroundHeight,
   });
   clearTunnelTerrain(
-    [environment.terrain.terrain, environment.terrain.distantHorizon],
+    [
+      environment.terrain.terrain,
+      environment.terrain.distantHorizon,
+      ...environment.terrain.groundCoverZones,
+    ],
     tunnel.route,
   );
   environment.lighting.excludeFromTunnel(tunnel.mesh);
