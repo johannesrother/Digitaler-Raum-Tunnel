@@ -14,20 +14,14 @@ export function createIvoryArchitecture(scene, materials, getGroundHeight) {
   const axes = createEntranceAxes();
   const portalMaterial = createPortalTransitionMaterial(materials.ivoryArchitecture);
   const portal = createOrganicPortalShell(scene, portalMaterial, getGroundHeight, axes);
-  const transitionMaterial = createTunnelTransitionMaterial(materials.ivoryInterior);
-  const interior = createInvitingEntranceInterior(
-    scene,
-    transitionMaterial,
-    materials.ivoryInterior,
-    materials.ivoryInteriorFade,
-    getGroundHeight,
-    axes,
-  );
 
   return {
-    shadowCasters: [portal, interior.floor, interior.fade],
+    shadowCasters: [portal],
     reflectors: [portal],
-    tunnel: { portal, ...interior },
+    // The portal now opens directly into the organic tunnel.  The former
+    // five-metre ivory interior was the separate ribbed/skeletal structure
+    // in front of that opening.
+    tunnel: { portal, shell: null, floor: null, fade: null, daylight: null },
     entrance: {
       center: ENTRANCE_CENTER.clone(),
       forward: axes.forward.clone(),

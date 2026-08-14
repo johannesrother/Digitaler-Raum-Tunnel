@@ -324,13 +324,14 @@ function createDebugPanel() {
  */
 function createTunnelWorldGroup(options) {
   const entrance = options.tunnelEntrance;
-  const entranceMeshes = [entrance.portal, entrance.shell, entrance.floor, entrance.fade];
+  const entranceMeshes = [entrance.portal, entrance.shell, entrance.floor, entrance.fade]
+    .filter(Boolean);
   const allMeshes = [options.tunnel.mesh, ...entranceMeshes];
   const originalVisibility = new Map(allMeshes.map((mesh) => [mesh, mesh.visibility]));
 
   const setEntranceEnabled = (enabled) => {
     entranceMeshes.forEach((mesh) => mesh.setEnabled(enabled));
-    entrance.daylight.setEnabled(enabled);
+    entrance.daylight?.setEnabled(enabled);
   };
 
   return {
@@ -350,7 +351,7 @@ function createTunnelWorldGroup(options) {
       });
       // The entrance light only joins once the rupture already has volume, so
       // it cannot spill onto the idyll before the reveal.
-      entrance.daylight.setEnabled(amount > 0.48);
+      entrance.daylight?.setEnabled(amount > 0.48);
     },
     closePortal() {
       setEntranceEnabled(false);

@@ -91,7 +91,9 @@ function createTunnelRoute(entrance) {
   };
 
   const controls = [
-    fromEntrance(5.0, 0, 0),
+    // Begin the continuous organic shell at the portal itself.  The remaining
+    // controls are unchanged, preserving the established tunnel path.
+    fromEntrance(0, 0, 0),
     fromEntrance(16, -0.35, 0.04),
     fromEntrance(30, -1.45, -0.08),
     fromEntrance(45, -1.1, -0.13),
