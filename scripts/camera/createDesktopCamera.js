@@ -7,7 +7,11 @@ const STANDING_EYE_HEIGHT = 1.65;
 export function createDesktopCamera(scene, canvas, standingPosition = BABYLON.Vector3.Zero()) {
   const camera = new BABYLON.UniversalCamera(
     "idyll-standing-camera",
-    new BABYLON.Vector3(standingPosition.x, STANDING_EYE_HEIGHT, standingPosition.z),
+    new BABYLON.Vector3(
+      standingPosition.x,
+      standingPosition.y + STANDING_EYE_HEIGHT,
+      standingPosition.z,
+    ),
     scene,
   );
 

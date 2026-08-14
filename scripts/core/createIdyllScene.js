@@ -13,9 +13,9 @@ export async function createIdyllScene(engine, canvas) {
   scene.skipPointerMovePicking = true;
 
   const environment = await createIdyllEnvironment(scene);
-  const glbIdyll = await createGlbIdyll(scene);
+  const glbIdyll = await createGlbIdyll(scene, environment.startPosition);
   disableOldIdyllVisuals(environment);
-  const desktopCamera = createDesktopCamera(scene, canvas, environment.startPosition);
+  const desktopCamera = createDesktopCamera(scene, canvas, glbIdyll.startPosition);
   const tunnel = createOrganicTunnel(scene, {
     entrance: environment.architecture.entrance,
     grassMaterial: environment.materials.terrain,
@@ -38,7 +38,7 @@ export async function createIdyllScene(engine, canvas) {
   const whiteRoom = createWhiteRoom(scene, tunnelExit, exitDirection);
   const whiteRoomTone = createWhiteRoomTone();
   const transition = createIdyllTunnelTransition(scene, {
-    startPosition: environment.startPosition,
+    startPosition: glbIdyll.startPosition,
     entrance: environment.architecture.entrance,
     desktopCamera,
     tunnel,
