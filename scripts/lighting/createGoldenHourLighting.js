@@ -55,6 +55,7 @@ export function createGoldenHourLighting(scene) {
   return {
     sky,
     sun,
+    skyFill,
     addShadowCasters(meshes) {
       meshes.forEach((mesh) => shadows.addShadowCaster(mesh, true));
     },
