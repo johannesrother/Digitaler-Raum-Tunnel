@@ -281,9 +281,11 @@ function createSpacetimeRift(scene, entrance, tunnelStart, tunnelMesh) {
   const center = tunnelStart.add(new BABYLON.Vector3(0, 1.65, 0));
   const lateral = entrance.lateral.clone();
   const forward = entrance.forward.clone();
+  const leftProfile = [-0.1, -0.28, -0.12, -0.38, -0.22, -0.46, -0.3, -0.56, -0.38, -0.63, -0.45, -0.58, -0.24, -0.4, -0.14, -0.3, -0.04, 0.11, 0.02];
+  const rightProfile = [0.14, 0.39, 0.2, 0.3, 0.5, 0.32, 0.6, 0.43, 0.7, 0.47, 0.76, 0.52, 0.6, 0.78, 0.48, 0.74, 0.56, 0.69, 0.42];
   const edgeMaterial = new BABYLON.StandardMaterial("spacetime-rift-torn-edge-material", scene);
-  edgeMaterial.diffuseColor = BABYLON.Color3.FromHexString("#f0d8c8");
-  edgeMaterial.emissiveColor = BABYLON.Color3.FromHexString("#b48b87");
+  edgeMaterial.diffuseColor = BABYLON.Color3.FromHexString("#dcecf4");
+  edgeMaterial.emissiveColor = BABYLON.Color3.FromHexString("#91afc4");
   edgeMaterial.specularColor = BABYLON.Color3.Black();
   edgeMaterial.backFaceCulling = false;
   edgeMaterial.disableLighting = true;
@@ -309,6 +311,7 @@ function createSpacetimeRift(scene, entrance, tunnelStart, tunnelMesh) {
   const apertureMask = createRiftCrevice(scene, segments, maskMaterial, "spacetime-rift-opening-stencil-mask");
   apertureMask.mesh.setEnabled(false);
   const fractures = createRiftFractures(scene, center, lateral, forward, creviceMaterial);
+  const fragments = createRiftFragments(scene, center, lateral, forward, edgeMaterial);
   const tunnelMaterial = tunnelMesh.material;
   const originalRenderGroup = tunnelMesh.renderingGroupId;
   const originalStencil = {
@@ -321,7 +324,7 @@ function createSpacetimeRift(scene, entrance, tunnelStart, tunnelMesh) {
     opStencilDepthPass: tunnelMaterial.stencil.opStencilDepthPass,
   };
   let maskEnabled = false;
-  [left.mesh, right.mesh, crevice.mesh, ...fractures].forEach((mesh) => { mesh.renderingGroupId = 2; });
+  [left.mesh, right.mesh, crevice.mesh, ...fractures, ...fragments.map(({ mesh }) => mesh)].forEach((mesh) => { mesh.renderingGroupId = 2; });
   apertureMask.mesh.renderingGroupId = 0;
 
   const setTunnelMask = (enabled) => {
@@ -354,39 +357,40 @@ function createSpacetimeRift(scene, entrance, tunnelStart, tunnelMesh) {
     positions[offset + 1] = center.y + y;
     positions[offset + 2] = center.z + lateral.z * x + forward.z * depth;
   };
+  const fracturePoint = (side, index, formation, opening, closure, elapsed) => {
+    const amount = index / segments;
+    const taper = Math.sin(amount * Math.PI) ** 0.62;
+    const profile = side < 0 ? leftProfile[index] : rightProfile[index];
+    const diagonal = (amount - 0.5) * 0.92;
+    const split = (0.012 + (side < 0 ? 0.63 : 0.78) * opening * taper) * closure;
+    const sectionJitter = ((index % 4) - 1.5) * 0.035 * formation;
+    const x = diagonal + profile * formation * (0.35 + opening * 0.65) + side * split + sectionJitter;
+    const y = (amount - 0.5) * (0.12 + formation * 3.4) + (index % 3 - 1) * 0.035 * formation;
+    const depth = -0.12 + (index % 5 - 2) * 0.055 * formation
+      + Math.sin(elapsed * 1.7 + index * 1.9 + side) * 0.018 * opening;
+    return { x, y, depth };
+  };
   const updateEdge = (edge, side, elapsed, formation, opening, closure) => {
-    const halfHeight = (0.08 + formation * 1.72) * closure;
     const positions = edge.positions;
     for (let index = 0; index <= segments; index += 1) {
-      const amount = index / segments;
-      const taper = Math.sin(amount * Math.PI) ** 0.46;
-      const irregular = (Math.sin(amount * 17.3 + side * 1.8) * 0.075
-        + Math.sin(amount * 31.2 - side * 0.5) * 0.032) * formation;
-      const wobble = Math.sin(elapsed * 2.25 + amount * 9.1 + side) * 0.026 * opening;
-      const gap = (0.018 + 0.73 * opening * taper) * closure;
-      const inner = side * gap + irregular + wobble;
-      const outer = inner + side * (0.18 + Math.sin(amount * 8.7 + side) * 0.04) * formation * closure;
-      const y = (amount - 0.5) * halfHeight * 2 + Math.sin(amount * 13.5 + side) * 0.045 * formation;
+      const point = fracturePoint(side, index, formation, opening, closure, elapsed);
+      const thickness = (0.09 + (index % 3) * 0.038) * formation * closure;
+      const outer = point.x + side * thickness;
       const vertex = index * 12;
-      setPoint(positions, vertex, inner, y, -0.11);
-      setPoint(positions, vertex + 3, outer, y + Math.sin(amount * 5.2) * 0.035, -0.11);
-      setPoint(positions, vertex + 6, inner, y, 0.17);
-      setPoint(positions, vertex + 9, outer, y + Math.sin(amount * 5.2) * 0.035, 0.17);
+      setPoint(positions, vertex, point.x, point.y, point.depth);
+      setPoint(positions, vertex + 3, outer, point.y + (index % 2 ? 0.045 : -0.025) * formation, point.depth - side * 0.045);
+      setPoint(positions, vertex + 6, point.x, point.y, point.depth + 0.22 + (index % 3) * 0.04);
+      setPoint(positions, vertex + 9, outer, point.y + (index % 2 ? 0.045 : -0.025) * formation, point.depth + 0.24);
     }
     edge.mesh.updateVerticesData(BABYLON.VertexBuffer.PositionKind, positions, true);
   };
   const updateCrevice = (elapsed, formation, opening, closure) => {
-    const halfHeight = (0.08 + formation * 1.72) * closure;
     const positions = crevice.positions;
     for (let index = 0; index <= segments; index += 1) {
-      const amount = index / segments;
-      const taper = Math.sin(amount * Math.PI) ** 0.46;
-      const gap = (0.018 + 0.73 * opening * taper) * closure;
-      const y = (amount - 0.5) * halfHeight * 2;
-      const leftJitter = Math.sin(amount * 17.3 - 1.8) * 0.075 * formation;
-      const rightJitter = Math.sin(amount * 17.3 + 1.8) * 0.075 * formation;
-      setPoint(positions, index * 6, -gap + leftJitter, y, -0.125);
-      setPoint(positions, index * 6 + 3, gap + rightJitter, y, -0.125);
+      const leftPoint = fracturePoint(-1, index, formation, opening, closure, elapsed);
+      const rightPoint = fracturePoint(1, index, formation, opening, closure, elapsed);
+      setPoint(positions, index * 6, leftPoint.x, leftPoint.y, leftPoint.depth - 0.015);
+      setPoint(positions, index * 6 + 3, rightPoint.x, rightPoint.y, rightPoint.depth - 0.015);
     }
     crevice.mesh.updateVerticesData(BABYLON.VertexBuffer.PositionKind, positions, true);
     positions.forEach((value, index) => { apertureMask.positions[index] = value; });
@@ -419,9 +423,17 @@ function createSpacetimeRift(scene, entrance, tunnelStart, tunnelMesh) {
         mesh.visibility = BABYLON.Scalar.Clamp((1 - opening * 1.6) * formation * 1.7, 0, 0.9);
         mesh.setEnabled(mesh.visibility > 0.01);
       });
+      fragments.forEach((fragment, index) => {
+        const visibility = BABYLON.Scalar.Clamp(formation * (0.28 + opening * 0.72), 0, 0.82);
+        fragment.mesh.visibility = visibility;
+        fragment.mesh.setEnabled(visibility > 0.01);
+        fragment.mesh.position.copyFrom(fragment.base.add(forward.scale((index % 2 ? -1 : 1) * opening * 0.12)));
+        fragment.mesh.rotation.y = fragment.rotation + elapsed * 0.14 * (index % 2 ? -1 : 1);
+      });
     },
     dispose() {
       fractures.forEach((mesh) => mesh.dispose());
+      fragments.forEach(({ mesh }) => mesh.dispose());
       left.mesh.dispose();
       right.mesh.dispose();
       crevice.mesh.dispose();
@@ -482,9 +494,10 @@ function createRiftCrevice(scene, segments, material, name = "spacetime-rift-dar
 function createRiftFractures(scene, center, lateral, forward, material) {
   const makePoint = (x, y) => center.add(lateral.scale(x)).add(forward.scale(-0.135)).add(new BABYLON.Vector3(0, y, 0));
   const branches = [
-    [[-0.02, 0.72], [-0.28, 0.88], [-0.38, 1.05]],
-    [[0.03, 0.23], [0.3, 0.39], [0.43, 0.34]],
-    [[-0.02, -0.45], [-0.24, -0.62], [-0.32, -0.81]],
+    [[-0.22, 0.98], [-0.56, 1.08], [-0.78, 1.32]],
+    [[0.42, 0.28], [0.7, 0.5], [0.92, 0.43]],
+    [[-0.32, -0.56], [-0.66, -0.72], [-0.82, -1.02]],
+    [[0.16, 1.3], [0.46, 1.5], [0.52, 1.73]],
   ];
   return branches.map((points, index) => {
     const mesh = BABYLON.MeshBuilder.CreateTube(`spacetime-rift-fracture-${index}`, {
@@ -496,6 +509,27 @@ function createRiftFractures(scene, center, lateral, forward, material) {
     mesh.material = material;
     mesh.isPickable = false;
     return mesh;
+  });
+}
+
+function createRiftFragments(scene, center, lateral, forward, material) {
+  const definitions = [
+    [-0.92, 0.94, -0.04, 0.13, 0.6],
+    [0.98, 0.46, 0.12, 0.1, 1.8],
+    [-0.7, -0.7, 0.18, 0.09, 2.4],
+    [0.72, -0.28, -0.1, 0.12, 0.9],
+  ];
+  return definitions.map(([x, y, depth, size, rotation], index) => {
+    const mesh = BABYLON.MeshBuilder.CreatePolyhedron(`spacetime-rift-fragment-${index}`, {
+      type: index % 2,
+      size,
+    }, scene);
+    const base = center.add(lateral.scale(x)).add(forward.scale(depth)).add(new BABYLON.Vector3(0, y, 0));
+    mesh.position.copyFrom(base);
+    mesh.rotation.set(index * 0.4, rotation, index * -0.3);
+    mesh.material = material;
+    mesh.isPickable = false;
+    return { mesh, base, rotation };
   });
 }
 
