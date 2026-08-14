@@ -109,14 +109,14 @@ function createTunnelRoute(entrance) {
 
   const controls = [
     fromEntrance(5.0, 0, 0),
-    fromEntrance(11, -2.8, 0.08),
-    fromEntrance(20, 3.4, -0.22),
-    fromEntrance(29, -4.2, -0.48),
-    fromEntrance(38, 3.5, -0.24),
-    fromEntrance(47, -3.6, 0.06),
-    fromEntrance(55, 2.6, 0.42),
-    fromEntrance(61, -1.2, 1.18),
-    fromEntrance(66, 0.4, 3.05),
+    fromEntrance(16, -0.35, 0.04),
+    fromEntrance(30, -1.45, -0.08),
+    fromEntrance(45, -1.1, -0.13),
+    fromEntrance(57, 0.45, -0.06),
+    fromEntrance(65, 1.05, 0.02),
+    fromEntrance(70, 0.65, 0.08),
+    fromEntrance(73, 0.2, 0.1),
+    fromEntrance(76, 0, 0.1),
   ];
   const samples = [];
   let totalLength = 0;
