@@ -12,16 +12,13 @@ const VIEWER_POSITION = new BABYLON.Vector3(0, 0, -5.5);
  */
 export function createIvoryArchitecture(scene, materials, getGroundHeight) {
   const axes = createEntranceAxes();
-  const portalMaterial = createPortalTransitionMaterial(materials.ivoryArchitecture);
-  const portal = createOrganicPortalShell(scene, portalMaterial, getGroundHeight, axes);
 
   return {
-    shadowCasters: [portal],
-    reflectors: [portal],
-    // The portal now opens directly into the organic tunnel.  The former
-    // five-metre ivory interior was the separate ribbed/skeletal structure
-    // in front of that opening.
-    tunnel: { portal, shell: null, floor: null, fade: null, daylight: null },
+    shadowCasters: [],
+    reflectors: [],
+    // The timed reveal remains the dimensional portal.  No beige facade or
+    // threshold geometry is placed between the idyll and the dark tunnel.
+    tunnel: { portal: null, shell: null, floor: null, fade: null, daylight: null },
     entrance: {
       center: ENTRANCE_CENTER.clone(),
       forward: axes.forward.clone(),
