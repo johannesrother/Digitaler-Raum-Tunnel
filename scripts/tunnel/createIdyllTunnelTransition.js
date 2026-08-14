@@ -5,7 +5,6 @@ import {
 } from "./tunnelConfig.js";
 
 const TUNNEL_START = 20;
-const TUNNEL_END = TUNNEL_START + TUNNEL_DURATION;
 const WHITE_ROOM_ARRIVAL_DURATION = 1;
 const WHITE_ROOM_DURATION = 5;
 const MOVEMENT_EASE_IN_DURATION = 0.75;
@@ -19,7 +18,7 @@ export function createIdyllTunnelTransition(scene, options) {
   const root = new BABYLON.TransformNode("idyll-to-tunnel-locomotion-root", scene);
   const start = options.startPosition.clone();
   const entry = createEntryPath(start, options.entrance, options.initialForward, options.tunnel.route.start);
-  const tunnelRoute = createTunnelTravelRoute(entry, options.tunnel.route);
+  const tunnelRoute = createTunnelTravelRoute(entry, options.tunnel.route, options.entrance.center);
   const debug = createDebugPanel();
   let elapsed = 0;
   let xrCamera = null;
@@ -44,27 +43,33 @@ export function createIdyllTunnelTransition(scene, options) {
     const delta = Math.min((frameTime - previousFrameTime) / 1000, 0.04);
     previousFrameTime = frameTime;
     elapsed += delta;
-    let tunnelTime = 0;
+    const travelTime = Math.max(0, elapsed - TUNNEL_START);
+    const hasEnteredTunnel = travelTime >= tunnelRoute.entryTime;
+    const hasReachedWhiteRoom = travelTime >= tunnelRoute.duration;
+    const tunnelTime = hasEnteredTunnel
+      ? BABYLON.Scalar.Clamp(travelTime - tunnelRoute.entryTime, 0, TUNNEL_DURATION)
+      : 0;
 
-    if (elapsed >= TUNNEL_START && elapsed < TUNNEL_END) {
-      tunnelTime = elapsed - TUNNEL_START;
-      options.tunnel.update(tunnelTime);
-      applyPathTransform(root, tunnelRoute, tunnelTime, initialHeading, delta);
+    if (elapsed >= TUNNEL_START && !hasReachedWhiteRoom) {
+      applyPathTransform(root, tunnelRoute, travelTime, initialHeading, delta);
+      if (hasEnteredTunnel) {
+        options.tunnel.update(tunnelTime);
+      }
       options.whiteRoom.preview(smoothstep((tunnelTime - WHITE_PREVIEW_START) / (TUNNEL_DURATION - WHITE_PREVIEW_START)));
-    } else if (elapsed >= TUNNEL_END) {
+    } else if (hasReachedWhiteRoom) {
       activateWhiteRoom(options, root);
-      const arrival = smoothstep((elapsed - TUNNEL_END) / WHITE_ROOM_ARRIVAL_DURATION);
+      const arrival = smoothstep((travelTime - tunnelRoute.duration) / WHITE_ROOM_ARRIVAL_DURATION);
       root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, options.whiteRoom.finalPosition, arrival));
-      if (!previousWorldHidden && elapsed >= TUNNEL_END + WHITE_ROOM_ARRIVAL_DURATION) {
+      if (!previousWorldHidden && travelTime >= tunnelRoute.duration + WHITE_ROOM_ARRIVAL_DURATION) {
         isolatePreviousWorld(options);
         previousWorldHidden = true;
       }
-      if (!whiteRoomFinished && elapsed >= TUNNEL_END + WHITE_ROOM_DURATION) {
+      if (!whiteRoomFinished && travelTime >= tunnelRoute.duration + WHITE_ROOM_DURATION) {
         options.whiteRoomTone.deactivate();
         whiteRoomFinished = true;
       }
     }
-    debug.update(elapsed, tunnelTime, tunnelRoute);
+    debug.update(elapsed, travelTime, tunnelTime, tunnelRoute, hasEnteredTunnel);
   });
 
   return {
@@ -112,7 +117,7 @@ function createEntryPath(start, entrance, initialForward, finish) {
   return points;
 }
 
-function createTunnelTravelRoute(entryPath, tunnelRoute) {
+function createTunnelTravelRoute(entryPath, tunnelRoute, entranceCenter) {
   const points = [...entryPath];
   for (let index = 0; index <= 188; index += 1) {
     // The cap stays just ahead of the final ascent endpoint; the visitor can
@@ -121,15 +126,21 @@ function createTunnelTravelRoute(entryPath, tunnelRoute) {
       points.push(tunnelRoute.positionAt(index / 188 * 0.986));
     }
   }
-  return createPolylineRoute(points, TUNNEL_DURATION);
+  return createPolylineRoute(points, closestDistanceAlongPolyline(points, entranceCenter));
 }
 
-function createPolylineRoute(points, duration) {
+function createPolylineRoute(points, entranceDistance) {
   const lengths = [0];
   for (let index = 1; index < points.length; index += 1) {
     lengths.push(lengths[index - 1] + BABYLON.Vector3.Distance(points[index - 1], points[index]));
   }
   const totalLength = lengths.at(-1);
+  // The old 60-second clock included the approach from the idyll to the
+  // opening. Keep that route and its gentle ease-in, but derive its duration
+  // so the distance after the physical entrance always takes exactly 60 s.
+  const distanceInsideTunnel = totalLength - entranceDistance;
+  const duration = TUNNEL_DURATION * totalLength / distanceInsideTunnel
+    + MOVEMENT_EASE_IN_DURATION * 0.5;
   const normalTunnelSpeed = totalLength / (duration - MOVEMENT_EASE_IN_DURATION * 0.5);
 
   const distanceAt = (time) => {
@@ -156,6 +167,11 @@ function createPolylineRoute(points, duration) {
 
   return {
     endPosition: points.at(-1).clone(),
+    totalLength,
+    duration,
+    entryDistance: entranceDistance,
+    entryTime: entranceDistance / normalTunnelSpeed + MOVEMENT_EASE_IN_DURATION * 0.5,
+    distanceAt,
     positionAt,
     speedAt(time) {
       const clamped = BABYLON.Scalar.Clamp(time, 0, duration);
@@ -176,6 +192,29 @@ function createPolylineRoute(points, duration) {
         : BABYLON.Axis.Z.clone();
     },
   };
+}
+
+function closestDistanceAlongPolyline(points, target) {
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  let distanceAlongPath = 0;
+  let accumulated = 0;
+
+  for (let index = 1; index < points.length; index += 1) {
+    const from = points[index - 1];
+    const segment = points[index].subtract(from);
+    const segmentLength = segment.length();
+    const direction = segment.scale(1 / Math.max(segmentLength, 0.00001));
+    const projection = BABYLON.Scalar.Clamp(BABYLON.Vector3.Dot(target.subtract(from), direction), 0, segmentLength);
+    const closestPoint = from.add(direction.scale(projection));
+    const distance = BABYLON.Vector3.DistanceSquared(target, closestPoint);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      distanceAlongPath = accumulated + projection;
+    }
+    accumulated += segmentLength;
+  }
+
+  return distanceAlongPath;
 }
 
 function applyPathTransform(root, route, time, initialHeading, delta) {
@@ -212,8 +251,9 @@ function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initial
   if (elapsed < TUNNEL_START) {
     return;
   }
-  if (elapsed < TUNNEL_END) {
-    applyPathTransform(root, tunnelRoute, elapsed - TUNNEL_START, initialHeading, 0);
+  const travelTime = elapsed - TUNNEL_START;
+  if (travelTime < tunnelRoute.duration) {
+    applyPathTransform(root, tunnelRoute, travelTime, initialHeading, 0);
     return;
   }
   root.position.copyFrom(whiteRoom.finalPosition);
@@ -245,17 +285,18 @@ function createDebugPanel() {
   panel.className = "tunnel-debug-panel";
   document.body.append(panel);
   return {
-    update(experienceTime, tunnelTime, tunnelRoute) {
+    update(experienceTime, travelTime, tunnelTime, tunnelRoute, hasEnteredTunnel) {
       const phase = getTunnelPhase(tunnelTime);
-      const moving = experienceTime >= TUNNEL_START && experienceTime < TUNNEL_END;
-      const currentSpeed = moving ? tunnelRoute.speedAt(tunnelTime) : 0;
+      const moving = experienceTime >= TUNNEL_START && travelTime < tunnelRoute.duration;
+      const currentSpeed = moving ? tunnelRoute.speedAt(travelTime) : 0;
       panel.textContent = [
         `Experience: ${experienceTime.toFixed(1)} s`,
         `Tunnel: ${tunnelTime.toFixed(1)} / ${TUNNEL_DURATION} s`,
-        `Controller: ${moving ? "continuous tunnel route" : "stationary idyll"}`,
+        `Controller: ${hasEnteredTunnel && moving ? "continuous tunnel route" : "idyll approach"}`,
         `Speed: ${currentSpeed.toFixed(2)} / ${tunnelRoute.normalTunnelSpeed.toFixed(2)} m/s`,
         `Phase: ${phase.id}`,
         `Progress: ${(tunnelTime / TUNNEL_DURATION * 100).toFixed(0)} %`,
+        `Path: ${tunnelRoute.distanceAt(travelTime).toFixed(1)} / ${tunnelRoute.totalLength.toFixed(1)} m`,
         `Diameter: ${getTunnelDiameter(tunnelTime).toFixed(2)} m`,
       ].join("\n");
     },
