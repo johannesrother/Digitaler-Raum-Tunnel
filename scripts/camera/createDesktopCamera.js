@@ -11,9 +11,8 @@ export function createDesktopCamera(scene, canvas, standingPosition = BABYLON.Ve
     scene,
   );
 
-  // The visitor begins still and faces the Step-1 natural foundation. The
-  // deliberately open positive-x side remains reserved for a later tunnel.
-  camera.setTarget(new BABYLON.Vector3(-5.5, STANDING_EYE_HEIGHT, 2.5));
+  // The visitor begins still, looking gently down across the GLB meadow.
+  camera.setTarget(new BABYLON.Vector3(-5.5, 1.25, 2.5));
   camera.minZ = 0.1;
   camera.angularSensibility = 4000;
   camera.inputs.removeByType("FreeCameraKeyboardMoveInput");

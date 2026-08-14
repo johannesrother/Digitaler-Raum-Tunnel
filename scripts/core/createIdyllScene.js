@@ -1,5 +1,6 @@
 import { createDesktopCamera } from "../camera/createDesktopCamera.js";
 import { createIdyllEnvironment } from "../environment/createIdyllEnvironment.js";
+import { createGlbIdyll } from "../environment/createGlbIdyll.js";
 import { createOrganicTunnel } from "../tunnel/createOrganicTunnel.js";
 import { clearTunnelTerrain, removeIdyllObjectsFromTunnel } from "../tunnel/clearTunnelTerrain.js";
 import { createIdyllTunnelTransition } from "../tunnel/createIdyllTunnelTransition.js";
@@ -12,6 +13,8 @@ export async function createIdyllScene(engine, canvas) {
   scene.skipPointerMovePicking = true;
 
   const environment = await createIdyllEnvironment(scene);
+  const glbIdyll = await createGlbIdyll(scene);
+  disableOldIdyllVisuals(environment);
   const desktopCamera = createDesktopCamera(scene, canvas, environment.startPosition);
   const tunnel = createOrganicTunnel(scene, {
     entrance: environment.architecture.entrance,
@@ -50,7 +53,27 @@ export async function createIdyllScene(engine, canvas) {
     previousWorldMeshes: scene.meshes.filter((mesh) => mesh.name !== "white-room-endless-void"),
     previousWorldLights: [...scene.lights],
   });
-  scene.metadata = { environment, desktopCamera, tunnel, transition, whiteRoom, whiteRoomTone };
+  scene.metadata = {
+    environment,
+    glbIdyll,
+    desktopCamera,
+    tunnel,
+    transition,
+    whiteRoom,
+    whiteRoomTone,
+  };
 
   return scene;
+}
+
+function disableOldIdyllVisuals(environment) {
+  [
+    environment.lighting.sky,
+    environment.terrain.terrain,
+    environment.terrain.distantHorizon,
+    ...environment.terrain.groundCoverZones,
+    ...environment.water.pools,
+    environment.water.stream,
+    ...environment.assets.placed.flatMap((entry) => entry.meshes),
+  ].forEach((mesh) => mesh.setEnabled(false));
 }
