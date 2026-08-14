@@ -8,13 +8,14 @@ import {
 
 const EYE_HEIGHT = 1.65;
 const PATH_SAMPLES = 188;
-const PROFILE_SIDES = 26;
-const WALL_DEFORMATION_TARGETS = 4;
+const PROFILE_SIDES = 32;
+const WALL_DEFORMATION_TARGETS = 6;
+const MINIMUM_CLEAR_RADIUS = 0.58;
 
 /**
  * Builds one continuous, inward-facing biomorphic shell along a non-linear
- * path. The section profile, ribs and surface colour all evolve with time,
- * avoiding a cylinder or a visible sequence of rings.
+ * path. Wide, overlapping profile fields make the shell read as a continuous
+ * living membrane instead of a cylinder assembled from visible rings.
  */
 export function createOrganicTunnel(scene, options) {
   const route = createTunnelRoute(options.entrance);
@@ -184,15 +185,14 @@ function createTunnelShell(scene, route) {
       const angle = (side / PROFILE_SIDES) * Math.PI * 2;
       const profile = organicProfile(angle, progress, look.detail);
       const radius = diameter * 0.5 * profile;
-      const point = center
-        .add(lateral.scale(Math.cos(angle) * radius * (1 + Math.sin(angle + progress * 5.2) * 0.045)))
-        .add(vertical.scale(Math.sin(angle) * radius));
+      const direction = lateral.scale(Math.cos(angle)).add(vertical.scale(Math.sin(angle))).normalize();
+      const point = center.add(direction.scale(radius));
       positions.push(point.x, point.y, point.z);
       deformationVertices.push({
         angle,
         progress,
         radius,
-        direction: point.subtract(center).normalize(),
+        direction,
       });
       uvs.push(progress * 9.2, side / PROFILE_SIDES * 2.8);
       pushTunnelColor(colors, time, angle, progress, look);
@@ -227,16 +227,18 @@ function createTunnelShell(scene, route) {
 }
 
 /**
- * Four static, local contraction shapes are blended by Babylon's morph-target
- * system. The GPU interpolates the wall vertices, so the living surface has no
- * per-frame CPU vertex work and the locomotion corridor/floor stay untouched.
+ * Six broad contraction fields are blended by Babylon's morph-target system.
+ * The GPU interpolates the existing wall vertices; no geometry is rebuilt
+ * while the visitor travels through the tunnel.
  */
 function createWallDeformation(scene, mesh, basePositions, indices, vertices) {
   const manager = new BABYLON.MorphTargetManager(scene);
   const targets = Array.from({ length: WALL_DEFORMATION_TARGETS }, (_, targetIndex) => {
     const positions = basePositions.slice();
     vertices.forEach((vertex, index) => {
-      const contraction = getLocalContraction(vertex.progress, vertex.angle, targetIndex);
+      const requestedContraction = getLocalContraction(vertex.progress, vertex.angle, targetIndex);
+      const safeContraction = Math.max(0, 1 - MINIMUM_CLEAR_RADIUS / vertex.radius);
+      const contraction = Math.min(requestedContraction, safeContraction);
       const offset = vertex.direction.scale(-vertex.radius * contraction);
       const position = index * 3;
       positions[position] += offset.x;
@@ -266,39 +268,39 @@ function createWallDeformation(scene, mesh, basePositions, indices, vertices) {
 }
 
 function getLocalContraction(progress, angle, targetIndex) {
-  // Each target owns two wide, separated regions. They overlap only softly,
-  // making the pressure feel regional instead of like a scaled tube.
-  const centers = [
-    [0.16, 0.64],
-    [0.29, 0.78],
-    [0.43, 0.9],
-    [0.53],
-  ][targetIndex];
-  const regionalMask = Math.max(...centers.map((center) => bell(progress, center, 0.105)));
-  const entryMask = smoothstep((progress - 0.045) / 0.16);
-  const exitMask = 1 - smoothstep((progress - 0.82) / 0.16);
+  const center = [0.1, 0.25, 0.4, 0.56, 0.72, 0.86][targetIndex];
+  const regionalMask = bell(progress, center, 0.145);
+  const entryMask = smoothstep((progress - 0.035) / 0.18);
+  // The final opening stays calm and clear for the White Room sightline.
+  const exitMask = 1 - smoothstep((progress - 0.88) / 0.11);
   const journeyStrength = getJourneyDeformationStrength(progress * TUNNEL_DURATION);
-  const asymmetricWallWeight = 0.76
-    + Math.max(0, Math.sin(angle + targetIndex * 1.67)) * 0.18
-    + Math.max(0, Math.sin(angle * 2.0 - targetIndex * 0.91)) * 0.08;
-  return regionalMask * entryMask * exitMask * journeyStrength * asymmetricWallWeight;
+  const principalWall = softAngularLobe(angle, targetIndex * 1.19 + 0.44, 0.78);
+  const supportingWall = softAngularLobe(angle, targetIndex * 1.87 + 2.1, 1.04) * 0.52;
+  const diagonalShift = 0.72 + 0.28 * Math.sin(angle * 1.45 + progress * 12.7 + targetIndex * 0.71);
+  return regionalMask * entryMask * exitMask * journeyStrength
+    * (0.035 + principalWall * 0.078 + supportingWall * 0.045) * diagonalShift;
 }
 
 function getJourneyDeformationStrength(time) {
-  const arrival = smoothstep((time - 3) / 12);
-  const release = 1 - smoothstep((time - 52) / 8);
-  // 2.5% baseline, rising to a maximum local contraction below 8%.
-  return (0.025 + arrival * 0.05) * release;
+  const arrival = smoothstep((time - 4) / 16);
+  const compression = smoothstep((time - 18) / 34);
+  const release = 1 - smoothstep((time - 54) / 6);
+  // The late passage feels more active, but the exit itself relaxes again.
+  return (0.42 + arrival * 0.25 + compression * 0.33) * release;
 }
 
 function getPressureWaveInfluence(time, targetIndex) {
-  const cycle = 3.45 + targetIndex * 0.37;
-  const phase = targetIndex * 1.91;
-  const broadPulse = 0.5 + 0.5 * Math.sin((time / cycle) * Math.PI * 2 + phase);
-  const secondaryPulse = 0.82 + 0.18 * Math.sin(time * 1.13 + targetIndex * 2.37);
-  // A raised pulse leaves relaxed intervals between contractions and avoids a
-  // mechanical in/out rhythm shared by the whole tunnel.
-  return Math.pow(broadPulse, 1.55) * secondaryPulse;
+  const targetCenter = [0.1, 0.25, 0.4, 0.56, 0.72, 0.86][targetIndex];
+  // One wave begins deeper in the passage and moves toward the visitor while
+  // a slower one glides forward. Cross-fading nearby fields makes the motion
+  // read as travelling pressure rather than a synchronized tube pulse.
+  const returningWave = wrap01(0.96 - time * 0.027);
+  const advancingWave = wrap01(0.16 + time * 0.017 + Math.sin(time * 0.11) * 0.04);
+  const returningPressure = circularBell(targetCenter, returningWave, 0.14);
+  const advancingPressure = circularBell(targetCenter, advancingWave, 0.2) * 0.48;
+  const breath = 0.06 + 0.06 * (0.5 + 0.5 * Math.sin(time * (0.31 + targetIndex * 0.037) + targetIndex * 1.83));
+  const lateIntensity = 0.66 + smoothstep((time - 16) / 35) * 0.34;
+  return BABYLON.Scalar.Clamp((returningPressure + advancingPressure + breath) * lateIntensity, 0, 1);
 }
 
 function bell(value, center, width) {
@@ -307,11 +309,35 @@ function bell(value, center, width) {
 }
 
 function organicProfile(angle, progress, detail) {
-  const broadFold = Math.sin(angle * 2.0 + progress * 10.3) * (0.045 + detail * 0.11);
-  const asymmetry = Math.sin(angle + progress * 4.8) * (0.035 + detail * 0.075);
-  const ribBand = Math.pow(Math.max(0, Math.sin(progress * 74 + angle * 1.65)), 10) * detail * 0.1;
-  const cavity = Math.pow(Math.max(0, Math.sin(angle * 3.0 - progress * 17)), 5) * detail * 0.055;
-  return 1 + broadFold + asymmetry - ribBand - cavity;
+  const intensity = 0.34 + detail * 0.76;
+  // These slow fields drift around the section and along the route. None is
+  // aligned with a section ring, so the surface has broad bulges and folds
+  // rather than a repeated procedural band.
+  const primaryBulge = Math.sin(angle * 1.08 + progress * 4.3 + Math.sin(progress * 2.2) * 0.7) * 0.15;
+  const opposingBulge = Math.sin(angle * 2.17 - progress * 6.6 + 1.4) * 0.085;
+  const softFold = Math.sin(angle * 3.12 + progress * 13.8 + Math.sin(progress * 5.1)) * 0.064;
+  const driftingCavity = -softAngularLobe(angle, progress * 8.4 + 1.9, 0.66)
+    * (0.055 + detail * 0.085);
+  const smallShift = Math.sin(angle * 4.31 - progress * 19.7 + 0.8) * 0.02;
+  return BABYLON.Scalar.Clamp(
+    1 + (primaryBulge + opposingBulge + softFold + driftingCavity + smallShift) * intensity,
+    0.79,
+    1.26,
+  );
+}
+
+function softAngularLobe(angle, center, width) {
+  const offset = Math.atan2(Math.sin(angle - center), Math.cos(angle - center));
+  return Math.exp(-((offset / width) ** 2) * 1.8);
+}
+
+function circularBell(value, center, width) {
+  const offset = Math.min(Math.abs(value - center), 1 - Math.abs(value - center));
+  return Math.exp(-((offset / width) ** 2) * 3.4);
+}
+
+function wrap01(value) {
+  return ((value % 1) + 1) % 1;
 }
 
 function pushTunnelColor(target, time, angle, progress, look) {
@@ -319,12 +345,14 @@ function pushTunnelColor(target, time, angle, progress, look) {
   const charcoal = new BABYLON.Color3(0.12, 0.12, 0.145);
   const progression = smoothstep((time - 5) / 53);
   const base = BABYLON.Color3.Lerp(warm, charcoal, progression);
-  const groove = Math.pow(Math.max(0, Math.sin(progress * 74 + angle * 1.65)), 12);
-  const redAmount = groove * look.red;
+  const broadMembrane = 0.5 + 0.5 * Math.sin(angle * 1.08 + progress * 4.3 + Math.sin(progress * 2.2) * 0.7);
+  const diagonalFold = Math.max(0, Math.sin(angle * 3.12 + progress * 13.8 + Math.sin(progress * 5.1)));
+  const cavityShade = softAngularLobe(angle, progress * 8.4 + 1.9, 0.66);
+  const surfaceLight = 0.62 + broadMembrane * 0.2 - diagonalFold * 0.14 - cavityShade * 0.1;
   target.push(
-    BABYLON.Scalar.Lerp(base.r, 0.3, redAmount),
-    BABYLON.Scalar.Lerp(base.g, 0.025, redAmount),
-    BABYLON.Scalar.Lerp(base.b, 0.04, redAmount),
+    base.r * surfaceLight,
+    base.g * surfaceLight,
+    base.b * surfaceLight,
     1,
   );
 }
@@ -333,16 +361,16 @@ function createTunnelMaterial(scene) {
   const material = new BABYLON.PBRMaterial("organic-tunnel-pbr", scene);
   material.albedoTexture = createTexture(scene, "./assets/textures/architecture/ivory-mineral/ivory_mineral_1k_color.jpg", 1, true);
   material.bumpTexture = createTexture(scene, "./assets/textures/architecture/ivory-mineral/ivory_mineral_1k_normalgl.jpg", 1, false);
-  material.bumpTexture.level = 0.11;
+  material.bumpTexture.level = 0.16;
   material.metallicTexture = createTexture(scene, "./assets/textures/architecture/ivory-mineral/ivory_mineral_1k_roughness.jpg", 1, false);
   material.useRoughnessFromMetallicTextureGreen = true;
   material.useMetallnessFromMetallicTextureBlue = false;
   material.useVertexColors = true;
   material.albedoColor = BABYLON.Color3.White();
   material.metallic = 0;
-  material.roughness = 0.84;
-  material.environmentIntensity = 0.12;
-  material.specularIntensity = 0.16;
+  material.roughness = 0.9;
+  material.environmentIntensity = 0.08;
+  material.specularIntensity = 0.1;
   material.backFaceCulling = false;
   return material;
 }
