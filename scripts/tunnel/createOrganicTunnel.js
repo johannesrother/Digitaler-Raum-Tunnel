@@ -220,17 +220,6 @@ function createTunnelShell(scene, route) {
     }
   }
 
-  const capCenter = positions.length / 3;
-  const end = route.end.clone();
-  end.y += EYE_HEIGHT;
-  positions.push(end.x, end.y, end.z);
-  uvs.push(1, 0.5);
-  colors.push(0.04, 0.035, 0.05, 1);
-  const endStart = PATH_SAMPLES * PROFILE_SIDES;
-  for (let side = 0; side < PROFILE_SIDES; side += 1) {
-    indices.push(capCenter, endStart + side, endStart + ((side + 1) % PROFILE_SIDES));
-  }
-
   BABYLON.VertexData.ComputeNormals(positions, indices, normals);
   const mesh = new BABYLON.Mesh("general-organic-tunnel-v1", scene);
   const data = new BABYLON.VertexData();

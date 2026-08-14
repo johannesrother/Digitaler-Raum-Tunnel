@@ -3,8 +3,8 @@
  * The visitor is enclosed by a very large inverted sphere, so no room edges,
  * corners, lights or horizon line become readable.
  */
-export function createWhiteRoom(scene, tunnelEnd) {
-  const finalPosition = tunnelEnd.add(new BABYLON.Vector3(0, -6.2, 0));
+export function createWhiteRoom(scene, tunnelEnd, exitDirection) {
+  const finalPosition = tunnelEnd.add(exitDirection.scale(3.2));
   const voidMesh = BABYLON.MeshBuilder.CreateSphere(
     "white-room-endless-void",
     {
@@ -15,7 +15,8 @@ export function createWhiteRoom(scene, tunnelEnd) {
     scene,
   );
   voidMesh.position.copyFrom(finalPosition);
-  voidMesh.material = createVoidMaterial(scene);
+  const material = createVoidMaterial(scene);
+  voidMesh.material = material;
   voidMesh.isPickable = false;
   voidMesh.setEnabled(false);
 
@@ -24,15 +25,26 @@ export function createWhiteRoom(scene, tunnelEnd) {
 
   return {
     finalPosition,
+    preview(amount) {
+      const blend = BABYLON.Scalar.Clamp(amount, 0, 1);
+      voidMesh.setEnabled(blend > 0.0001);
+      material.alpha = blend;
+      material.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+      scene.clearColor = new BABYLON.Color4(
+        BABYLON.Scalar.Lerp(originalClearColor.r, 1, blend),
+        BABYLON.Scalar.Lerp(originalClearColor.g, 1, blend),
+        BABYLON.Scalar.Lerp(originalClearColor.b, 1, blend),
+        1,
+      );
+      scene.fogDensity = BABYLON.Scalar.Lerp(originalFogDensity, 0, blend);
+    },
     activate() {
-      voidMesh.setEnabled(true);
-      scene.clearColor = new BABYLON.Color4(1, 1, 1, 1);
-      scene.fogDensity = 0;
+      this.preview(1);
     },
     dispose() {
       scene.clearColor = originalClearColor;
       scene.fogDensity = originalFogDensity;
-      voidMesh.material.dispose();
+      material.dispose();
       voidMesh.dispose();
     },
   };

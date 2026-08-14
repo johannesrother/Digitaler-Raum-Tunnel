@@ -25,9 +25,11 @@ export async function createIdyllScene(engine, canvas) {
   environment.lighting.excludeFromTunnel(tunnel.mesh);
   environment.lighting.excludeFromTunnel(tunnel.floor);
   tunnel.grassPatches.forEach((patch) => environment.lighting.excludeFromTunnel(patch));
-  // Match the final tunnel travel position so the hand-off into the void has
-  // no lateral jump before the controlled vertical fall begins.
-  const whiteRoom = createWhiteRoom(scene, tunnel.route.positionAt(0.986));
+  const tunnelExit = tunnel.route.positionAt(0.986);
+  const exitDirection = tunnel.route.tangentAt(0.986);
+  exitDirection.y = 0;
+  exitDirection.normalize();
+  const whiteRoom = createWhiteRoom(scene, tunnelExit, exitDirection);
   const whiteRoomTone = createWhiteRoomTone();
   const transition = createIdyllTunnelTransition(scene, {
     startPosition: environment.startPosition,

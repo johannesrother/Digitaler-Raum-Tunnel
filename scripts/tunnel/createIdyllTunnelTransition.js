@@ -6,9 +6,10 @@ import {
 
 const TUNNEL_START = 20;
 const TUNNEL_END = TUNNEL_START + TUNNEL_DURATION;
-const FALL_DURATION = 1;
+const WHITE_ROOM_ARRIVAL_DURATION = 1;
 const WHITE_ROOM_DURATION = 5;
 const MOVEMENT_EASE_IN_DURATION = 0.75;
+const WHITE_PREVIEW_START = 30;
 
 /**
  * The only automatic motion in the experience. A parent transform carries
@@ -49,6 +50,7 @@ export function createIdyllTunnelTransition(scene, options) {
       tunnelTime = elapsed - TUNNEL_START;
       options.tunnel.update(tunnelTime);
       applyPathTransform(root, tunnelRoute, tunnelTime, initialHeading, delta);
+      options.whiteRoom.preview(smoothstep((tunnelTime - WHITE_PREVIEW_START) / (TUNNEL_DURATION - WHITE_PREVIEW_START)));
       // Keep the idyll readable behind the visitor immediately after crossing
       // the threshold, then remove its large ground surfaces before they can
       // intrude into the deeper tunnel volume.
@@ -58,8 +60,8 @@ export function createIdyllTunnelTransition(scene, options) {
       }
     } else if (elapsed >= TUNNEL_END) {
       activateWhiteRoom(options, root);
-      const fall = controlledFall((elapsed - TUNNEL_END) / FALL_DURATION);
-      root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, options.whiteRoom.finalPosition, fall));
+      const arrival = smoothstep((elapsed - TUNNEL_END) / WHITE_ROOM_ARRIVAL_DURATION);
+      root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, options.whiteRoom.finalPosition, arrival));
       if (!whiteRoomFinished && elapsed >= TUNNEL_END + WHITE_ROOM_DURATION) {
         options.whiteRoomTone.deactivate();
         whiteRoomFinished = true;
@@ -204,11 +206,6 @@ function activateWhiteRoom(options, root) {
   root.rotation.z = 0;
 }
 
-function controlledFall(amount) {
-  const clamped = BABYLON.Scalar.Clamp(amount, 0, 1);
-  return clamped * clamped * (3 - 2 * clamped);
-}
-
 function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initialHeading) {
   if (elapsed < TUNNEL_START) {
     return;
@@ -230,6 +227,11 @@ function lerpAngle(from, to, amount) {
 
 function normalizeAngle(value) {
   return Math.atan2(Math.sin(value), Math.cos(value));
+}
+
+function smoothstep(value) {
+  const clamped = BABYLON.Scalar.Clamp(value, 0, 1);
+  return clamped * clamped * (3 - 2 * clamped);
 }
 
 function createDebugPanel() {
@@ -267,9 +269,4 @@ function cubicBezier(start, controlA, controlB, finish, amount) {
     .add(controlA.scale(3 * inverse * inverse * amount))
     .add(controlB.scale(3 * inverse * amount * amount))
     .add(finish.scale(amount ** 3));
-}
-
-function smoothstep(value) {
-  const clamped = BABYLON.Scalar.Clamp(value, 0, 1);
-  return clamped * clamped * (3 - 2 * clamped);
 }
