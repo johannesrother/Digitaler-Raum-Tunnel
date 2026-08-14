@@ -4,13 +4,17 @@ import {
   getTunnelPhase,
 } from "./tunnelConfig.js";
 
-const TUNNEL_START = 20;
-const PORTAL_REVEAL_DURATION = 2.5;
-const MOVEMENT_START = TUNNEL_START + PORTAL_REVEAL_DURATION;
+const IDYLL_TRAVEL_DURATION = 20;
+const RIFT_FORM_START = 16;
+const RIFT_TUNNEL_REVEAL_START = 18.25;
+const RIFT_PULL_DURATION = 2.25;
+const TUNNEL_START = IDYLL_TRAVEL_DURATION + RIFT_PULL_DURATION;
 const WHITE_ROOM_ARRIVAL_DURATION = 1;
 const WHITE_ROOM_DURATION = 5;
-const MOVEMENT_EASE_IN_DURATION = 0.75;
 const WHITE_PREVIEW_START = 30;
+const RIFT_APPROACH_REMAINING_TIME = 3.4;
+const RIFT_CLOSE_DURATION = 1.4;
+const ENTRY_ROUTE_EASE_DURATION = 0.75;
 
 /**
  * The only automatic motion in the experience. A parent transform carries
@@ -22,10 +26,13 @@ export function createIdyllTunnelTransition(scene, options) {
   const entry = createEntryPath(start, options.entrance, options.initialForward, options.tunnel.route.start);
   const tunnelRoute = createTunnelTravelRoute(entry, options.tunnel.route, options.entrance.center);
   const tunnelWorld = createTunnelWorldGroup(options);
+  const rift = createSpacetimeRift(scene, options.entrance, options.tunnel.route.start);
+  const riftApproachTime = Math.max(0.5, tunnelRoute.entryTime - RIFT_APPROACH_REMAINING_TIME);
   const debug = createDebugPanel();
   let elapsed = 0;
   let xrCamera = null;
   let previousWorldHidden = false;
+  let idyllHidden = false;
   let whiteRoomFinished = false;
   let portalClosed = false;
   let previousFrameTime = performance.now();
@@ -36,8 +43,7 @@ export function createIdyllTunnelTransition(scene, options) {
   root.position.copyFrom(start);
   options.desktopCamera.parent = root;
   options.desktopCamera.position.set(0, options.desktopCamera.position.y - start.y, 0);
-  // The real tunnel and every entrance/rib mesh stay out of the idyll. The
-  // opening is revealed only after the first twenty seconds.
+  // The real tunnel stays out of the idyll until the rift itself is open.
   tunnelWorld.hide();
   options.tunnel.setSequenceActive(false);
 
@@ -46,41 +52,47 @@ export function createIdyllTunnelTransition(scene, options) {
     const delta = Math.min((frameTime - previousFrameTime) / 1000, 0.04);
     previousFrameTime = frameTime;
     elapsed += delta;
-    const reveal = smoothstep((elapsed - TUNNEL_START) / PORTAL_REVEAL_DURATION);
-    if (!portalClosed) {
-      tunnelWorld.reveal(reveal);
-    }
-    const travelTime = Math.max(0, elapsed - MOVEMENT_START);
-    const hasEnteredTunnel = travelTime >= tunnelRoute.entryTime;
-    const hasReachedWhiteRoom = travelTime >= tunnelRoute.duration;
-    const tunnelTime = hasEnteredTunnel
-      ? BABYLON.Scalar.Clamp(travelTime - tunnelRoute.entryTime, 0, TUNNEL_DURATION)
-      : 0;
+    const riftFormation = smoothstep((elapsed - RIFT_FORM_START) / (IDYLL_TRAVEL_DURATION - RIFT_FORM_START));
+    const tunnelReveal = smoothstep((elapsed - RIFT_TUNNEL_REVEAL_START) / (IDYLL_TRAVEL_DURATION - RIFT_TUNNEL_REVEAL_START));
+    const tunnelElapsed = elapsed - TUNNEL_START;
+    const tunnelTime = BABYLON.Scalar.Clamp(tunnelElapsed, 0, TUNNEL_DURATION);
+    const hasEnteredTunnel = elapsed >= TUNNEL_START;
+    const hasReachedWhiteRoom = tunnelElapsed >= TUNNEL_DURATION;
 
-    if (elapsed >= MOVEMENT_START && !hasReachedWhiteRoom) {
-      applyPathTransform(root, tunnelRoute, travelTime, initialHeading, delta);
-      if (hasEnteredTunnel) {
-        options.tunnel.update(tunnelTime);
-        if (!portalClosed) {
-          tunnelWorld.closePortal();
-          portalClosed = true;
-        }
+    if (!portalClosed) {
+      tunnelWorld.reveal(tunnelReveal);
+    }
+    rift.update(elapsed, riftFormation, tunnelReveal, hasEnteredTunnel ? tunnelTime : -1);
+
+    if (elapsed < IDYLL_TRAVEL_DURATION) {
+      applyPathTransform(root, tunnelRoute, riftApproachTime * calmTravelProgress(elapsed / IDYLL_TRAVEL_DURATION), initialHeading, delta);
+    } else if (!hasEnteredTunnel) {
+      applyPathTransform(root, tunnelRoute, riftApproachTime + (tunnelRoute.entryTime - riftApproachTime)
+        * riftPullProgress(elapsed - IDYLL_TRAVEL_DURATION, tunnelRoute, riftApproachTime), initialHeading, delta);
+    } else if (!hasReachedWhiteRoom) {
+      applyPathTransform(root, tunnelRoute, tunnelRoute.entryTime + tunnelTime, initialHeading, delta);
+      options.tunnel.update(tunnelTime);
+      if (!idyllHidden) {
+        tunnelWorld.closePortal();
+        portalClosed = true;
+        idyllHidden = true;
       }
       options.whiteRoom.preview(smoothstep((tunnelTime - WHITE_PREVIEW_START) / (TUNNEL_DURATION - WHITE_PREVIEW_START)));
-    } else if (hasReachedWhiteRoom) {
+    } else {
       activateWhiteRoom(options, root);
-      const arrival = smoothstep((travelTime - tunnelRoute.duration) / WHITE_ROOM_ARRIVAL_DURATION);
+      const whiteElapsed = tunnelElapsed - TUNNEL_DURATION;
+      const arrival = smoothstep(whiteElapsed / WHITE_ROOM_ARRIVAL_DURATION);
       root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, options.whiteRoom.finalPosition, arrival));
-      if (!previousWorldHidden && travelTime >= tunnelRoute.duration + WHITE_ROOM_ARRIVAL_DURATION) {
+      if (!previousWorldHidden && whiteElapsed >= WHITE_ROOM_ARRIVAL_DURATION) {
         isolatePreviousWorld(options);
         previousWorldHidden = true;
       }
-      if (!whiteRoomFinished && travelTime >= tunnelRoute.duration + WHITE_ROOM_DURATION) {
+      if (!whiteRoomFinished && whiteElapsed >= WHITE_ROOM_DURATION) {
         options.whiteRoomTone.deactivate();
         whiteRoomFinished = true;
       }
     }
-    debug.update(elapsed, travelTime, tunnelTime, tunnelRoute, hasEnteredTunnel);
+    debug.update(elapsed, tunnelTime, tunnelRoute, hasEnteredTunnel, riftFormation);
   });
 
   return {
@@ -93,14 +105,14 @@ export function createIdyllTunnelTransition(scene, options) {
         if (isInXr) {
           xrCamera = xr.baseExperience.camera;
           xrCamera.parent = root;
-          syncRootToExperienceTime(root, elapsed, tunnelRoute, options.whiteRoom, initialHeading);
+          syncRootToExperienceTime(root, elapsed, tunnelRoute, options.whiteRoom, initialHeading, riftApproachTime);
           return;
         }
         if (xrCamera) {
           xrCamera.parent = null;
           xrCamera = null;
         }
-        syncRootToExperienceTime(root, elapsed, tunnelRoute, options.whiteRoom, initialHeading);
+        syncRootToExperienceTime(root, elapsed, tunnelRoute, options.whiteRoom, initialHeading, riftApproachTime);
       });
     },
     dispose() {
@@ -110,6 +122,7 @@ export function createIdyllTunnelTransition(scene, options) {
         xrCamera.parent = null;
       }
       debug.dispose();
+      rift.dispose();
       root.dispose();
     },
   };
@@ -151,17 +164,17 @@ function createPolylineRoute(points, entranceDistance) {
   // so the distance after the physical entrance always takes exactly 60 s.
   const distanceInsideTunnel = totalLength - entranceDistance;
   const duration = TUNNEL_DURATION * totalLength / distanceInsideTunnel
-    + MOVEMENT_EASE_IN_DURATION * 0.5;
-  const normalTunnelSpeed = totalLength / (duration - MOVEMENT_EASE_IN_DURATION * 0.5);
+    + ENTRY_ROUTE_EASE_DURATION * 0.5;
+  const normalTunnelSpeed = totalLength / (duration - ENTRY_ROUTE_EASE_DURATION * 0.5);
 
   const distanceAt = (time) => {
     const clamped = BABYLON.Scalar.Clamp(time, 0, duration);
-    if (clamped < MOVEMENT_EASE_IN_DURATION) {
-      const easeProgress = clamped / MOVEMENT_EASE_IN_DURATION;
-      return normalTunnelSpeed * MOVEMENT_EASE_IN_DURATION
+    if (clamped < ENTRY_ROUTE_EASE_DURATION) {
+      const easeProgress = clamped / ENTRY_ROUTE_EASE_DURATION;
+      return normalTunnelSpeed * ENTRY_ROUTE_EASE_DURATION
         * (easeProgress ** 3 - 0.5 * easeProgress ** 4);
     }
-    return normalTunnelSpeed * (clamped - MOVEMENT_EASE_IN_DURATION * 0.5);
+    return normalTunnelSpeed * (clamped - ENTRY_ROUTE_EASE_DURATION * 0.5);
   };
 
   const positionAt = (time) => {
@@ -181,12 +194,12 @@ function createPolylineRoute(points, entranceDistance) {
     totalLength,
     duration,
     entryDistance: entranceDistance,
-    entryTime: entranceDistance / normalTunnelSpeed + MOVEMENT_EASE_IN_DURATION * 0.5,
+    entryTime: entranceDistance / normalTunnelSpeed + ENTRY_ROUTE_EASE_DURATION * 0.5,
     distanceAt,
     positionAt,
     speedAt(time) {
       const clamped = BABYLON.Scalar.Clamp(time, 0, duration);
-      return normalTunnelSpeed * smoothstep(clamped / MOVEMENT_EASE_IN_DURATION);
+      return normalTunnelSpeed * smoothstep(clamped / ENTRY_ROUTE_EASE_DURATION);
     },
     normalTunnelSpeed,
     tangentAt(time) {
@@ -240,6 +253,107 @@ function applyPathTransform(root, route, time, initialHeading, delta) {
   root.rotation.y = lerpAngle(root.rotation.y, desiredYaw, smoothing);
 }
 
+function calmTravelProgress(amount) {
+  const progress = BABYLON.Scalar.Clamp(amount, 0, 1);
+  // This remains almost constant-speed, with just enough easing to avoid a
+  // mathematical start/stop while crossing the open landscape.
+  return progress + (smoothstep(progress) - progress) * 0.12;
+}
+
+function riftPullProgress(time, route, approachTime) {
+  const progress = BABYLON.Scalar.Clamp(time / RIFT_PULL_DURATION, 0, 1);
+  const virtualDuration = Math.max(route.entryTime - approachTime, 0.001);
+  const approachSpeed = route.distanceAt(approachTime) / IDYLL_TRAVEL_DURATION;
+  const startSlope = BABYLON.Scalar.Clamp(
+    approachSpeed / route.normalTunnelSpeed * RIFT_PULL_DURATION / virtualDuration,
+    0.05,
+    0.5,
+  );
+  const endSlope = BABYLON.Scalar.Clamp(RIFT_PULL_DURATION / virtualDuration, 0.2, 1.3);
+  const inverse = 1 - progress;
+  return (progress ** 3 - 2 * progress ** 2 + progress) * startSlope
+    + (-2 * progress ** 3 + 3 * progress ** 2)
+    + (progress ** 3 - progress ** 2) * endSlope;
+}
+
+function createSpacetimeRift(scene, entrance, tunnelStart) {
+  const segments = 52;
+  const center = tunnelStart.add(new BABYLON.Vector3(0, 1.65, 0));
+  const lateral = entrance.lateral.clone();
+  const positions = [];
+  const indices = [];
+  const shape = Array.from({ length: segments + 1 }, (_, index) => {
+    const angle = index / segments * Math.PI * 2;
+    return {
+      angle,
+      inner: 1 + Math.sin(angle * 3.1 + 0.4) * 0.08 + Math.sin(angle * 7.2 - 0.7) * 0.035,
+      rim: 0.13 + Math.sin(angle * 4.6 - 0.3) * 0.035,
+    };
+  });
+  shape.forEach(() => positions.push(0, 0, 0, 0, 0, 0));
+  for (let index = 0; index < segments; index += 1) {
+    const first = index * 2;
+    indices.push(first, first + 1, first + 2, first + 1, first + 3, first + 2);
+  }
+  const mesh = new BABYLON.Mesh("spacetime-rift-edge", scene);
+  const vertexData = new BABYLON.VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = [];
+  BABYLON.VertexData.ComputeNormals(positions, indices, vertexData.normals);
+  vertexData.applyToMesh(mesh);
+  const material = new BABYLON.StandardMaterial("spacetime-rift-edge-material", scene);
+  material.diffuseColor = BABYLON.Color3.FromHexString("#120f13");
+  material.emissiveColor = BABYLON.Color3.FromHexString("#2a1c24");
+  material.specularColor = BABYLON.Color3.Black();
+  material.backFaceCulling = false;
+  material.alpha = 0;
+  mesh.material = material;
+  mesh.isPickable = false;
+  mesh.setEnabled(false);
+
+  const updateVertices = (elapsed, width, height) => {
+    shape.forEach((point, index) => {
+      const wobble = Math.sin(elapsed * 2.3 + point.angle * 5.4) * 0.025;
+      const innerWidth = 1.72 * point.inner * width;
+      const innerHeight = 1.92 * point.inner * height;
+      const outerWidth = (1.72 * point.inner + point.rim) * width;
+      const outerHeight = (1.92 * point.inner + point.rim * 1.15) * height;
+      const writePoint = (vertex, radialWidth, radialHeight) => {
+        const x = Math.cos(point.angle) * radialWidth;
+        const y = Math.sin(point.angle) * radialHeight + wobble * height;
+        positions[vertex] = center.x + lateral.x * x;
+        positions[vertex + 1] = center.y + y;
+        positions[vertex + 2] = center.z + lateral.z * x;
+      };
+      writePoint(index * 6, outerWidth, outerHeight);
+      writePoint(index * 6 + 3, innerWidth, innerHeight);
+    });
+    mesh.updateVerticesData(BABYLON.VertexBuffer.PositionKind, positions);
+  };
+
+  return {
+    update(elapsed, formation, reveal, tunnelTime) {
+      const isClosing = tunnelTime >= 0;
+      const closure = isClosing ? 1 - smoothstep(tunnelTime / RIFT_CLOSE_DURATION) : 1;
+      if (formation <= 0 || closure <= 0.01) {
+        mesh.setEnabled(false);
+        return;
+      }
+      const opening = smoothstep((elapsed - 18) / 2);
+      const width = (0.035 + opening * 0.965) * closure;
+      const height = (0.18 + formation * 0.82) * closure;
+      updateVertices(elapsed, width, height);
+      material.alpha = (0.22 + reveal * 0.62) * closure;
+      mesh.setEnabled(true);
+    },
+    dispose() {
+      material.dispose();
+      mesh.dispose();
+    },
+  };
+}
+
 function activateWhiteRoom(options, root) {
   if (options.whiteRoomActive) {
     return;
@@ -258,13 +372,19 @@ function isolatePreviousWorld(options) {
   options.previousWorldLights.forEach((light) => light.setEnabled(false));
 }
 
-function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initialHeading) {
-  if (elapsed < MOVEMENT_START) {
+function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initialHeading, riftApproachTime) {
+  if (elapsed < IDYLL_TRAVEL_DURATION) {
+    applyPathTransform(root, tunnelRoute, riftApproachTime * calmTravelProgress(elapsed / IDYLL_TRAVEL_DURATION), initialHeading, 0);
     return;
   }
-  const travelTime = elapsed - MOVEMENT_START;
-  if (travelTime < tunnelRoute.duration) {
-    applyPathTransform(root, tunnelRoute, travelTime, initialHeading, 0);
+  if (elapsed < TUNNEL_START) {
+    applyPathTransform(root, tunnelRoute, riftApproachTime + (tunnelRoute.entryTime - riftApproachTime)
+      * riftPullProgress(elapsed - IDYLL_TRAVEL_DURATION, tunnelRoute, riftApproachTime), initialHeading, 0);
+    return;
+  }
+  const tunnelTime = elapsed - TUNNEL_START;
+  if (tunnelTime < TUNNEL_DURATION) {
+    applyPathTransform(root, tunnelRoute, tunnelRoute.entryTime + tunnelTime, initialHeading, 0);
     return;
   }
   root.position.copyFrom(whiteRoom.finalPosition);
@@ -296,18 +416,29 @@ function createDebugPanel() {
   panel.className = "tunnel-debug-panel";
   document.body.append(panel);
   return {
-    update(experienceTime, travelTime, tunnelTime, tunnelRoute, hasEnteredTunnel) {
+    update(experienceTime, tunnelTime, tunnelRoute, hasEnteredTunnel, riftFormation) {
       const phase = getTunnelPhase(tunnelTime);
-      const moving = experienceTime >= MOVEMENT_START && travelTime < tunnelRoute.duration;
-      const currentSpeed = moving ? tunnelRoute.speedAt(travelTime) : 0;
+      const inWhiteRoom = experienceTime >= TUNNEL_START + TUNNEL_DURATION;
+      const inTunnel = hasEnteredTunnel && tunnelTime < TUNNEL_DURATION;
+      const controller = inWhiteRoom
+        ? "white room"
+        : inTunnel
+        ? "tunnel travel"
+        : experienceTime >= IDYLL_TRAVEL_DURATION
+          ? "rift pull"
+          : experienceTime >= RIFT_FORM_START
+            ? "rift forming"
+            : "idyll travel";
+      const currentSpeed = inTunnel ? tunnelRoute.normalTunnelSpeed : 0;
       panel.textContent = [
         `Experience: ${experienceTime.toFixed(1)} s`,
         `Tunnel: ${tunnelTime.toFixed(1)} / ${TUNNEL_DURATION} s`,
-        `Controller: ${hasEnteredTunnel && moving ? "continuous tunnel route" : moving ? "portal approach" : "stationary idyll"}`,
+        `Controller: ${controller}`,
         `Speed: ${currentSpeed.toFixed(2)} / ${tunnelRoute.normalTunnelSpeed.toFixed(2)} m/s`,
+        `Rift: ${(riftFormation * 100).toFixed(0)} %`,
         `Phase: ${phase.id}`,
         `Progress: ${(tunnelTime / TUNNEL_DURATION * 100).toFixed(0)} %`,
-        `Path: ${tunnelRoute.distanceAt(travelTime).toFixed(1)} / ${tunnelRoute.totalLength.toFixed(1)} m`,
+        `Tunnel path: ${(inTunnel ? tunnelTime * tunnelRoute.normalTunnelSpeed : 0).toFixed(1)} m`,
         `Diameter: ${getTunnelDiameter(tunnelTime).toFixed(2)} m`,
       ].join("\n");
     },
