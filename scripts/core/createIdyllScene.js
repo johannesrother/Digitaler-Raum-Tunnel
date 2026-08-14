@@ -23,8 +23,6 @@ export async function createIdyllScene(engine, canvas) {
     tunnel.route,
   );
   environment.lighting.excludeFromTunnel(tunnel.mesh);
-  environment.lighting.excludeFromTunnel(tunnel.floor);
-  tunnel.grassPatches.forEach((patch) => environment.lighting.excludeFromTunnel(patch));
   const tunnelExit = tunnel.route.positionAt(0.986);
   const exitDirection = tunnel.route.tangentAt(0.986);
   exitDirection.y = 0;

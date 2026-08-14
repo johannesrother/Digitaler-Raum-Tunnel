@@ -5,7 +5,6 @@ import {
   getTunnelPhase,
   getTunnelTwitchInterval,
 } from "./tunnelConfig.js";
-import { createTunnelFloor } from "./createTunnelFloor.js";
 
 const EYE_HEIGHT = 1.65;
 const PATH_SAMPLES = 188;
@@ -24,19 +23,7 @@ export function createOrganicTunnel(scene, options) {
   mesh.material = material;
   mesh.isPickable = false;
   mesh.receiveShadows = false;
-  const entranceFloorHeight = typeof options.getGroundHeight === "function"
-    ? options.getGroundHeight(route.start.x, route.start.z) + 0.05
-    : route.start.y;
-  const floorTransition = createTunnelFloor(
-    scene,
-    route,
-    material,
-    options.grassMaterial,
-    entranceFloorHeight,
-  );
-
-  const litMeshes = [mesh, floorTransition.floor, ...floorTransition.grassPatches];
-  const lights = createTunnelLights(scene, litMeshes, route);
+  const lights = createTunnelLights(scene, [mesh], route);
   let nextImpulseAt = 12.7;
   let impulse = 0;
   let activeTime = 0;
@@ -56,14 +43,9 @@ export function createOrganicTunnel(scene, options) {
 
   return {
     mesh,
-    floor: floorTransition.floor,
-    grassPatches: floorTransition.grassPatches,
-    grassFadeDistance: floorTransition.grassFadeDistance,
     route,
     setEnabled(enabled) {
       mesh.setEnabled(enabled);
-      floorTransition.floor.setEnabled(enabled);
-      floorTransition.grassPatches.forEach((patch) => patch.setEnabled(enabled));
       lights.points.forEach((light) => light.setEnabled(enabled));
       lights.fill.setEnabled(enabled);
     },
@@ -92,8 +74,6 @@ export function createOrganicTunnel(scene, options) {
       scene.onBeforeRenderObservable.remove(observer);
       lights.points.forEach((light) => light.dispose());
       lights.fill.dispose();
-      floorTransition.grassPatches.forEach((patch) => patch.dispose());
-      floorTransition.floor.dispose();
       wallDeformation.dispose();
       mesh.dispose();
       material.dispose();
