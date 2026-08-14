@@ -65,7 +65,7 @@ export function createIdyllTunnelTransition(scene, options) {
         whiteRoomFinished = true;
       }
     }
-    debug.update(elapsed, tunnelTime);
+    debug.update(elapsed, tunnelTime, tunnelRoute);
   });
 
   return {
@@ -122,20 +122,30 @@ function createTunnelTravelRoute(entryPath, tunnelRoute) {
       points.push(tunnelRoute.positionAt(index / 188 * 0.986));
     }
   }
-  return createPolylineRoute(points, TUNNEL_DURATION, createDistanceTable);
+  return createPolylineRoute(points, TUNNEL_DURATION);
 }
 
-function createPolylineRoute(points, duration, distanceTableFactory = null) {
+function createPolylineRoute(points, duration) {
   const lengths = [0];
   for (let index = 1; index < points.length; index += 1) {
     lengths.push(lengths[index - 1] + BABYLON.Vector3.Distance(points[index - 1], points[index]));
   }
   const totalLength = lengths.at(-1);
-  const distanceTable = distanceTableFactory ? distanceTableFactory(totalLength) : null;
+  const normalTunnelSpeed = totalLength / (duration - MOVEMENT_EASE_IN_DURATION * 0.5);
+
+  const distanceAt = (time) => {
+    const clamped = BABYLON.Scalar.Clamp(time, 0, duration);
+    if (clamped < MOVEMENT_EASE_IN_DURATION) {
+      const easeProgress = clamped / MOVEMENT_EASE_IN_DURATION;
+      return normalTunnelSpeed * MOVEMENT_EASE_IN_DURATION
+        * (easeProgress ** 3 - 0.5 * easeProgress ** 4);
+    }
+    return normalTunnelSpeed * (clamped - MOVEMENT_EASE_IN_DURATION * 0.5);
+  };
 
   const positionAt = (time) => {
     const clamped = BABYLON.Scalar.Clamp(time, 0, duration);
-    const distance = distanceTable ? sampleDistance(distanceTable, clamped) : clamped * totalLength;
+    const distance = distanceAt(clamped);
     const next = lengths.findIndex((length) => length >= distance);
     if (next <= 0) {
       return points[0].clone();
@@ -148,6 +158,11 @@ function createPolylineRoute(points, duration, distanceTableFactory = null) {
   return {
     endPosition: points.at(-1).clone(),
     positionAt,
+    speedAt(time) {
+      const clamped = BABYLON.Scalar.Clamp(time, 0, duration);
+      return normalTunnelSpeed * smoothstep(clamped / MOVEMENT_EASE_IN_DURATION);
+    },
+    normalTunnelSpeed,
     tangentAt(time) {
       // A short future sample filters tiny spline detail without delaying the
       // turning response into a visible late rotation.
@@ -162,25 +177,6 @@ function createPolylineRoute(points, duration, distanceTableFactory = null) {
         : BABYLON.Axis.Z.clone();
     },
   };
-}
-
-function createDistanceTable(totalLength) {
-  const intervals = 240;
-  const values = [0];
-  let accumulated = 0;
-  for (let index = 1; index <= intervals; index += 1) {
-    const time = index / intervals * TUNNEL_DURATION;
-    accumulated += smoothstep(time / MOVEMENT_EASE_IN_DURATION) * (TUNNEL_DURATION / intervals);
-    values.push(accumulated);
-  }
-  return values.map((value, index) => ({ time: index / intervals * TUNNEL_DURATION, distance: value / accumulated * totalLength }));
-}
-
-function sampleDistance(table, time) {
-  const index = Math.min(table.length - 2, Math.floor(time / TUNNEL_DURATION * (table.length - 1)));
-  const before = table[index];
-  const after = table[index + 1];
-  return BABYLON.Scalar.Lerp(before.distance, after.distance, (time - before.time) / Math.max(after.time - before.time, 0.0001));
 }
 
 function applyPathTransform(root, route, time, initialHeading, delta) {
@@ -245,15 +241,18 @@ function createDebugPanel() {
   panel.className = "tunnel-debug-panel";
   document.body.append(panel);
   return {
-    update(experienceTime, tunnelTime) {
+    update(experienceTime, tunnelTime, tunnelRoute) {
       const phase = getTunnelPhase(tunnelTime);
+      const moving = experienceTime >= TUNNEL_START && experienceTime < TUNNEL_END;
+      const currentSpeed = moving ? tunnelRoute.speedAt(tunnelTime) : 0;
       panel.textContent = [
         `Experience: ${experienceTime.toFixed(1)} s`,
         `Tunnel: ${tunnelTime.toFixed(1)} / ${TUNNEL_DURATION} s`,
+        `Controller: ${moving ? "continuous tunnel route" : "stationary idyll"}`,
+        `Speed: ${currentSpeed.toFixed(2)} / ${tunnelRoute.normalTunnelSpeed.toFixed(2)} m/s`,
         `Phase: ${phase.id}`,
         `Progress: ${(tunnelTime / TUNNEL_DURATION * 100).toFixed(0)} %`,
         `Diameter: ${getTunnelDiameter(tunnelTime).toFixed(2)} m`,
-        "Speed: controlled",
       ].join("\n");
     },
     dispose() {
