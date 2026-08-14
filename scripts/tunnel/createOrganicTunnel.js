@@ -10,6 +10,7 @@ import { createTunnelFloor } from "./createTunnelFloor.js";
 const EYE_HEIGHT = 1.65;
 const PATH_SAMPLES = 188;
 const PROFILE_SIDES = 26;
+const WALL_DEFORMATION_TARGETS = 4;
 
 /**
  * Builds one continuous, inward-facing biomorphic shell along a non-linear
@@ -18,7 +19,7 @@ const PROFILE_SIDES = 26;
  */
 export function createOrganicTunnel(scene, options) {
   const route = createTunnelRoute(options.entrance);
-  const mesh = createTunnelShell(scene, route);
+  const { mesh, wallDeformation } = createTunnelShell(scene, route);
   const material = createTunnelMaterial(scene);
   mesh.material = material;
   mesh.isPickable = false;
@@ -48,6 +49,7 @@ export function createOrganicTunnel(scene, options) {
     if (sequenceActive) {
       activeTime = Math.min(activeTime + delta, TUNNEL_DURATION);
     }
+    wallDeformation.update(activeTime);
     updateTunnelLights(lights, activeTime, impulse);
     impulse = Math.max(0, impulse - delta * 2.9);
   });
@@ -92,6 +94,7 @@ export function createOrganicTunnel(scene, options) {
       lights.fill.dispose();
       floorTransition.grassPatches.forEach((patch) => patch.dispose());
       floorTransition.floor.dispose();
+      wallDeformation.dispose();
       mesh.dispose();
       material.dispose();
     },
@@ -184,6 +187,7 @@ function createTunnelShell(scene, route) {
   const normals = [];
   const uvs = [];
   const colors = [];
+  const deformationVertices = [];
 
   for (let section = 0; section <= PATH_SAMPLES; section += 1) {
     const progress = section / PATH_SAMPLES;
@@ -203,6 +207,12 @@ function createTunnelShell(scene, route) {
         .add(lateral.scale(Math.cos(angle) * radius * (1 + Math.sin(angle + progress * 5.2) * 0.045)))
         .add(vertical.scale(Math.sin(angle) * radius - lowerFlatten));
       positions.push(point.x, point.y, point.z);
+      deformationVertices.push({
+        angle,
+        progress,
+        radius,
+        direction: point.subtract(center).normalize(),
+      });
       uvs.push(progress * 9.2, side / PROFILE_SIDES * 2.8);
       pushTunnelColor(colors, time, angle, progress, look);
     }
@@ -229,7 +239,90 @@ function createTunnelShell(scene, route) {
   data.uvs = uvs;
   data.colors = colors;
   data.applyToMesh(mesh);
-  return mesh;
+  return {
+    mesh,
+    wallDeformation: createWallDeformation(scene, mesh, positions, indices, deformationVertices),
+  };
+}
+
+/**
+ * Four static, local contraction shapes are blended by Babylon's morph-target
+ * system. The GPU interpolates the wall vertices, so the living surface has no
+ * per-frame CPU vertex work and the locomotion corridor/floor stay untouched.
+ */
+function createWallDeformation(scene, mesh, basePositions, indices, vertices) {
+  const manager = new BABYLON.MorphTargetManager(scene);
+  const targets = Array.from({ length: WALL_DEFORMATION_TARGETS }, (_, targetIndex) => {
+    const positions = basePositions.slice();
+    vertices.forEach((vertex, index) => {
+      const contraction = getLocalContraction(vertex.progress, vertex.angle, targetIndex);
+      const offset = vertex.direction.scale(-vertex.radius * contraction);
+      const position = index * 3;
+      positions[position] += offset.x;
+      positions[position + 1] += offset.y;
+      positions[position + 2] += offset.z;
+    });
+    const normals = [];
+    BABYLON.VertexData.ComputeNormals(positions, indices, normals);
+    const target = new BABYLON.MorphTarget(`organic-wall-pressure-${targetIndex}`, 0, scene);
+    target.setPositions(positions);
+    target.setNormals(normals);
+    manager.addTarget(target);
+    return target;
+  });
+  mesh.morphTargetManager = manager;
+
+  return {
+    update(time) {
+      targets.forEach((target, targetIndex) => {
+        target.influence = getPressureWaveInfluence(time, targetIndex);
+      });
+    },
+    dispose() {
+      manager.dispose();
+    },
+  };
+}
+
+function getLocalContraction(progress, angle, targetIndex) {
+  // Each target owns two wide, separated regions. They overlap only softly,
+  // making the pressure feel regional instead of like a scaled tube.
+  const centers = [
+    [0.16, 0.64],
+    [0.29, 0.78],
+    [0.43, 0.9],
+    [0.53],
+  ][targetIndex];
+  const regionalMask = Math.max(...centers.map((center) => bell(progress, center, 0.105)));
+  const entryMask = smoothstep((progress - 0.045) / 0.16);
+  const exitMask = 1 - smoothstep((progress - 0.82) / 0.16);
+  const journeyStrength = getJourneyDeformationStrength(progress * TUNNEL_DURATION);
+  const asymmetricWallWeight = 0.76
+    + Math.max(0, Math.sin(angle + targetIndex * 1.67)) * 0.18
+    + Math.max(0, Math.sin(angle * 2.0 - targetIndex * 0.91)) * 0.08;
+  return regionalMask * entryMask * exitMask * journeyStrength * asymmetricWallWeight;
+}
+
+function getJourneyDeformationStrength(time) {
+  const arrival = smoothstep((time - 3) / 12);
+  const release = 1 - smoothstep((time - 52) / 8);
+  // 2.5% baseline, rising to a maximum local contraction below 8%.
+  return (0.025 + arrival * 0.05) * release;
+}
+
+function getPressureWaveInfluence(time, targetIndex) {
+  const cycle = 3.45 + targetIndex * 0.37;
+  const phase = targetIndex * 1.91;
+  const broadPulse = 0.5 + 0.5 * Math.sin((time / cycle) * Math.PI * 2 + phase);
+  const secondaryPulse = 0.82 + 0.18 * Math.sin(time * 1.13 + targetIndex * 2.37);
+  // A raised pulse leaves relaxed intervals between contractions and avoids a
+  // mechanical in/out rhythm shared by the whole tunnel.
+  return Math.pow(broadPulse, 1.55) * secondaryPulse;
+}
+
+function bell(value, center, width) {
+  const distance = (value - center) / width;
+  return Math.exp(-distance * distance * 3.2);
 }
 
 function organicProfile(angle, progress, detail) {
