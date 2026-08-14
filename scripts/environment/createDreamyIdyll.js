@@ -1,4 +1,5 @@
-const MEADOW_RADIUS = 28;
+const MEADOW_RADIUS = 55;
+const NEAR_GRASS_RADIUS = 25;
 const GRASS_INSTANCE_COUNT = 330;
 const WISPY_GRASS_INSTANCE_COUNT = 82;
 const POLLEN_COUNT = 34;
@@ -11,6 +12,7 @@ const PACK_ROOT = "./assets/idylle%20pack/glTF/";
 export async function createDreamyIdyll(scene, startPosition) {
   const world = new BABYLON.TransformNode("dreamy-idyll-world", scene);
   const meadow = createRollingMeadow(scene, world, startPosition);
+  const mountains = createDistantMountainLayers(scene, world, startPosition);
   const sky = createDreamySky(scene, world);
   const lights = createDreamyLighting(scene);
   const libraries = await loadNatureLibraries(scene, world);
@@ -20,6 +22,7 @@ export async function createDreamyIdyll(scene, startPosition) {
   return {
     world,
     meadow,
+    mountains,
     sky,
     lights,
     vegetation,
@@ -41,7 +44,7 @@ export async function createDreamyIdyll(scene, startPosition) {
 }
 
 function createRollingMeadow(scene, world, startPosition) {
-  const rings = 16;
+  const rings = 32;
   const sectors = 96;
   const positions = [startPosition.x, getMeadowHeight(startPosition.x, startPosition.z, startPosition), startPosition.z];
   const normals = [0, 1, 0];
@@ -102,8 +105,57 @@ function getMeadowHeight(x, z, startPosition) {
   const fade = BABYLON.Scalar.Clamp((distance - 2.7) / 8, 0, 1);
   const broad = Math.sin(dx * 0.16 + dz * 0.045) * 0.28 + Math.cos(dz * 0.13 - dx * 0.05) * 0.19;
   const soft = Math.sin((dx - dz) * 0.11) * 0.08;
-  const edgeLift = Math.max(0, distance - 22) * 0.035;
+  const edgeLift = Math.max(0, distance - 34) * 0.052;
   return (broad + soft) * fade + edgeLift;
+}
+
+function createDistantMountainLayers(scene, world, startPosition) {
+  const layers = [
+    { radius: 74, base: 4.2, amplitude: 6.2, color: "#6e8876", alpha: 0.48, phase: 0.3 },
+    { radius: 112, base: 7.6, amplitude: 10.4, color: "#91a79b", alpha: 0.54, phase: 1.7 },
+    { radius: 156, base: 12.4, amplitude: 15.2, color: "#c1cdc4", alpha: 0.62, phase: 3.4 },
+  ];
+  return layers.map((layer, index) => createMountainLayer(scene, world, startPosition, layer, index));
+}
+
+function createMountainLayer(scene, world, startPosition, layer, layerIndex) {
+  const sectors = 96;
+  const positions = [];
+  const indices = [];
+  for (let index = 0; index <= sectors; index += 1) {
+    const angle = index / sectors * Math.PI * 2;
+    const x = startPosition.x + Math.cos(angle) * layer.radius;
+    const z = startPosition.z + Math.sin(angle) * layer.radius;
+    const ridgeSeed = Math.sin(angle * 2.35 + layer.phase) * 0.72
+      + Math.sin(angle * 5.1 - layer.phase * 0.7) * 0.28
+      + Math.sin(angle * 8.4 + layer.phase * 1.4) * 0.12;
+    const broadShape = 0.16 + Math.pow(Math.max(0, ridgeSeed), 1.65) * 1.22;
+    const height = layer.base + layer.amplitude * broadShape;
+    positions.push(x, -1.2, z, x, height, z);
+  }
+  for (let index = 0; index < sectors; index += 1) {
+    const lower = index * 2;
+    indices.push(lower, lower + 1, lower + 2, lower + 1, lower + 3, lower + 2);
+  }
+  const mesh = new BABYLON.Mesh(`dreamy-distant-mountain-layer-${layerIndex}`, scene);
+  const vertexData = new BABYLON.VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = [];
+  BABYLON.VertexData.ComputeNormals(positions, indices, vertexData.normals);
+  vertexData.applyToMesh(mesh);
+  const material = new BABYLON.StandardMaterial(`dreamy-distant-mountain-material-${layerIndex}`, scene);
+  const color = BABYLON.Color3.FromHexString(layer.color);
+  material.diffuseColor = color;
+  material.emissiveColor = color.scale(0.34);
+  material.specularColor = BABYLON.Color3.Black();
+  material.alpha = layer.alpha;
+  material.backFaceCulling = false;
+  material.fogEnabled = false;
+  mesh.material = material;
+  mesh.parent = world;
+  mesh.isPickable = false;
+  return mesh;
 }
 
 function createDreamySky(scene, world) {
@@ -247,14 +299,14 @@ function placeNature(scene, world, libraries, startPosition) {
   };
 
   for (let index = 0; index < GRASS_INSTANCE_COUNT; index += 1) {
-    const point = randomPoint(random, 1.8, MEADOW_RADIUS - 1.2);
+    const point = randomPoint(random, 1.8, NEAR_GRASS_RADIUS);
     add(libraries.Grass_Common_Short, `meadow-grass-${index}`, {
       x: startPosition.x + point.x, z: startPosition.z + point.z,
       scale: 0.72 + random() * 0.58, rotation: random() * Math.PI * 2,
     }, "grass");
   }
   for (let index = 0; index < WISPY_GRASS_INSTANCE_COUNT; index += 1) {
-    const point = randomPoint(random, 7, MEADOW_RADIUS - 1.4);
+    const point = randomPoint(random, 7, NEAR_GRASS_RADIUS + 5);
     add(libraries.Grass_Wispy_Tall, `meadow-wispy-grass-${index}`, {
       x: startPosition.x + point.x, z: startPosition.z + point.z,
       scale: 0.68 + random() * 0.56, rotation: random() * Math.PI * 2,
@@ -271,11 +323,24 @@ function placeNature(scene, world, libraries, startPosition) {
     add(libraries[library], `dreamy-tree-${index}`, { x: startPosition.x + x, z: startPosition.z + z, scale, rotation }, "trees");
   });
 
+  const middleTreePlacements = [
+    ["CommonTree_1", -34, -14, 0.86, 1.1], ["CommonTree_2", -42, 4, 0.9, 4.2],
+    ["CommonTree_3", -31, 28, 0.78, 2.7], ["CommonTree_4", -12, 43, 0.92, 5.1],
+    ["CommonTree_1", 17, 39, 0.82, 0.5], ["CommonTree_2", 39, 23, 0.9, 3.6],
+    ["CommonTree_3", 45, -8, 0.76, 1.8], ["CommonTree_4", 31, -32, 0.86, 4.8],
+    ["CommonTree_1", 4, -46, 0.78, 2.1], ["CommonTree_2", -27, -37, 0.83, 5.7],
+  ];
+  middleTreePlacements.forEach(([library, x, z, scale, rotation], index) => {
+    add(libraries[library], `dreamy-middle-tree-${index}`, { x: startPosition.x + x, z: startPosition.z + z, scale, rotation }, "trees");
+  });
+
   const flowerPlacements = [
     ["Flower_3_Group", -2.6, -1.8, 1.0, 0.4], ["Flower_4_Group", 2.8, -2.2, 0.92, 2.1],
     ["Flower_3_Group", -5.2, 2.7, 0.88, 5.0], ["Flower_4_Single", 4.2, 2.2, 1.15, 1.4],
     ["Flower_4_Group", 6.4, 5.2, 0.8, 0.7], ["Flower_3_Group", -7.2, -4.5, 0.76, 3.7],
     ["Flower_4_Single", -1.0, 6.0, 1.04, 5.4], ["Flower_4_Group", 8.0, -4.6, 0.72, 2.7],
+    ["Flower_3_Group", 1.3, -7.2, 0.86, 4.1], ["Flower_4_Group", -8.4, 1.2, 0.78, 1.8],
+    ["Flower_4_Single", 6.6, 7.4, 1.05, 3.1], ["Flower_3_Group", -3.6, 9.1, 0.72, 5.8],
   ];
   flowerPlacements.forEach(([library, x, z, scale, rotation], index) => {
     add(libraries[library], `dreamy-flower-${index}`, { x: startPosition.x + x, z: startPosition.z + z, scale, rotation }, "flowers");
