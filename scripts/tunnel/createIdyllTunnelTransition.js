@@ -5,6 +5,8 @@ import {
 } from "./tunnelConfig.js";
 
 const TUNNEL_START = 20;
+const PORTAL_REVEAL_DURATION = 2.5;
+const MOVEMENT_START = TUNNEL_START + PORTAL_REVEAL_DURATION;
 const WHITE_ROOM_ARRIVAL_DURATION = 1;
 const WHITE_ROOM_DURATION = 5;
 const MOVEMENT_EASE_IN_DURATION = 0.75;
@@ -19,11 +21,13 @@ export function createIdyllTunnelTransition(scene, options) {
   const start = options.startPosition.clone();
   const entry = createEntryPath(start, options.entrance, options.initialForward, options.tunnel.route.start);
   const tunnelRoute = createTunnelTravelRoute(entry, options.tunnel.route, options.entrance.center);
+  const tunnelWorld = createTunnelWorldGroup(options);
   const debug = createDebugPanel();
   let elapsed = 0;
   let xrCamera = null;
   let previousWorldHidden = false;
   let whiteRoomFinished = false;
+  let portalClosed = false;
   let previousFrameTime = performance.now();
   const initialHeading = headingFrom(options.initialForward);
 
@@ -32,10 +36,9 @@ export function createIdyllTunnelTransition(scene, options) {
   root.position.copyFrom(start);
   options.desktopCamera.parent = root;
   options.desktopCamera.position.set(0, options.desktopCamera.position.y - start.y, 0);
-  // The tunnel and its first visible section belong to the idyll from frame
-  // one. Only its time-based behaviour waits for the actual entry.
-  options.entranceFade.setEnabled(false);
-  options.tunnel.setEnabled(true);
+  // The real tunnel and every entrance/rib mesh stay out of the idyll. The
+  // opening is revealed only after the first twenty seconds.
+  tunnelWorld.hide();
   options.tunnel.setSequenceActive(false);
 
   const observer = scene.onBeforeRenderObservable.add(() => {
@@ -43,17 +46,25 @@ export function createIdyllTunnelTransition(scene, options) {
     const delta = Math.min((frameTime - previousFrameTime) / 1000, 0.04);
     previousFrameTime = frameTime;
     elapsed += delta;
-    const travelTime = Math.max(0, elapsed - TUNNEL_START);
+    const reveal = smoothstep((elapsed - TUNNEL_START) / PORTAL_REVEAL_DURATION);
+    if (!portalClosed) {
+      tunnelWorld.reveal(reveal);
+    }
+    const travelTime = Math.max(0, elapsed - MOVEMENT_START);
     const hasEnteredTunnel = travelTime >= tunnelRoute.entryTime;
     const hasReachedWhiteRoom = travelTime >= tunnelRoute.duration;
     const tunnelTime = hasEnteredTunnel
       ? BABYLON.Scalar.Clamp(travelTime - tunnelRoute.entryTime, 0, TUNNEL_DURATION)
       : 0;
 
-    if (elapsed >= TUNNEL_START && !hasReachedWhiteRoom) {
+    if (elapsed >= MOVEMENT_START && !hasReachedWhiteRoom) {
       applyPathTransform(root, tunnelRoute, travelTime, initialHeading, delta);
       if (hasEnteredTunnel) {
         options.tunnel.update(tunnelTime);
+        if (!portalClosed) {
+          tunnelWorld.closePortal();
+          portalClosed = true;
+        }
       }
       options.whiteRoom.preview(smoothstep((tunnelTime - WHITE_PREVIEW_START) / (TUNNEL_DURATION - WHITE_PREVIEW_START)));
     } else if (hasReachedWhiteRoom) {
@@ -248,10 +259,10 @@ function isolatePreviousWorld(options) {
 }
 
 function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initialHeading) {
-  if (elapsed < TUNNEL_START) {
+  if (elapsed < MOVEMENT_START) {
     return;
   }
-  const travelTime = elapsed - TUNNEL_START;
+  const travelTime = elapsed - MOVEMENT_START;
   if (travelTime < tunnelRoute.duration) {
     applyPathTransform(root, tunnelRoute, travelTime, initialHeading, 0);
     return;
@@ -287,12 +298,12 @@ function createDebugPanel() {
   return {
     update(experienceTime, travelTime, tunnelTime, tunnelRoute, hasEnteredTunnel) {
       const phase = getTunnelPhase(tunnelTime);
-      const moving = experienceTime >= TUNNEL_START && travelTime < tunnelRoute.duration;
+      const moving = experienceTime >= MOVEMENT_START && travelTime < tunnelRoute.duration;
       const currentSpeed = moving ? tunnelRoute.speedAt(travelTime) : 0;
       panel.textContent = [
         `Experience: ${experienceTime.toFixed(1)} s`,
         `Tunnel: ${tunnelTime.toFixed(1)} / ${TUNNEL_DURATION} s`,
-        `Controller: ${hasEnteredTunnel && moving ? "continuous tunnel route" : "idyll approach"}`,
+        `Controller: ${hasEnteredTunnel && moving ? "continuous tunnel route" : moving ? "portal approach" : "stationary idyll"}`,
         `Speed: ${currentSpeed.toFixed(2)} / ${tunnelRoute.normalTunnelSpeed.toFixed(2)} m/s`,
         `Phase: ${phase.id}`,
         `Progress: ${(tunnelTime / TUNNEL_DURATION * 100).toFixed(0)} %`,
@@ -302,6 +313,54 @@ function createDebugPanel() {
     },
     dispose() {
       panel.remove();
+    },
+  };
+}
+
+/**
+ * One authoritative visibility controller owns the real tunnel, its entrance
+ * shell, the previously visible ribbed interior, floor/fade helpers and their
+ * lights. Disabled meshes do not render or cast shadows during the idyll.
+ */
+function createTunnelWorldGroup(options) {
+  const entrance = options.tunnelEntrance;
+  const entranceMeshes = [entrance.portal, entrance.shell, entrance.floor, entrance.fade];
+  const allMeshes = [options.tunnel.mesh, ...entranceMeshes];
+  const originalVisibility = new Map(allMeshes.map((mesh) => [mesh, mesh.visibility]));
+
+  const setEntranceEnabled = (enabled) => {
+    entranceMeshes.forEach((mesh) => mesh.setEnabled(enabled));
+    entrance.daylight.setEnabled(enabled);
+  };
+
+  return {
+    hide() {
+      options.tunnel.setEnabled(false);
+      setEntranceEnabled(false);
+    },
+    reveal(amount) {
+      if (amount <= 0) {
+        this.hide();
+        return;
+      }
+      options.tunnel.setEnabled(true);
+      setEntranceEnabled(amount > 0.14);
+      allMeshes.forEach((mesh) => {
+        mesh.visibility = originalVisibility.get(mesh) * amount;
+      });
+      // The entrance light only joins once the rupture already has volume, so
+      // it cannot spill onto the idyll before the reveal.
+      entrance.daylight.setEnabled(amount > 0.48);
+    },
+    closePortal() {
+      setEntranceEnabled(false);
+      entranceMeshes.forEach((mesh) => {
+        mesh.visibility = originalVisibility.get(mesh);
+      });
+      // The rupture has closed behind the visitor: the idyll is no longer a
+      // renderable dimension from inside the tunnel, including through the
+      // later White-Room sightline.
+      options.idyllWorldMeshes.forEach((mesh) => mesh.setEnabled(false));
     },
   };
 }

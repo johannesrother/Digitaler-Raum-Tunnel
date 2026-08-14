@@ -54,13 +54,25 @@ export function removeIdyllObjectsFromTunnel(entries, route) {
 }
 
 function createRouteSamples(route) {
-  return Array.from({ length: 189 }, (_, index) => {
+  const samples = Array.from({ length: 189 }, (_, index) => {
     const progress = index / 188;
     return {
       point: route.positionAt(progress),
       diameter: getTunnelDiameter(progress * TUNNEL_DURATION),
     };
   });
+  // Keep the actual cutout open through the short spatial hand-off to the
+  // White Room. Without these continuation samples, the grass terrain could
+  // remain visible across the otherwise open final tunnel aperture.
+  const end = route.positionAt(1);
+  const direction = route.tangentAt(1);
+  for (let index = 1; index <= 10; index += 1) {
+    samples.push({
+      point: end.add(direction.scale(index * 0.4)),
+      diameter: getTunnelDiameter(TUNNEL_DURATION),
+    });
+  }
+  return samples;
 }
 
 function triangleIntersectsTunnel(positions, firstIndex, secondIndex, thirdIndex, routeSamples) {
