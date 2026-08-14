@@ -3,7 +3,7 @@
  * assets. It intentionally animates transform groups, never vertex buffers or
  * per-pixel effects, which keeps the pass comfortable for standalone WebXR.
  */
-export function createBreeze(scene, placedAssets, attractionTarget) {
+export function createBreeze(scene, placedAssets) {
   const anchorStates = [];
   const fernFrondStates = [];
 
@@ -17,45 +17,39 @@ export function createBreeze(scene, placedAssets, attractionTarget) {
         fernFrondStates.push(createNodeState(
           root,
           index * 1.73 + rootIndex * 0.91,
-          entry.anchor.position,
-          attractionTarget,
         ));
       });
       return;
     }
 
     if (entry.prefix.includes("pink-flower") || entry.prefix.includes("white-flower")) {
-      anchorStates.push(createAnchorState(entry.anchor, "flower", index, attractionTarget));
+      anchorStates.push(createAnchorState(entry.anchor, "flower", index));
       return;
     }
 
     if (entry.prefix.includes("shrub")) {
-      anchorStates.push(createAnchorState(entry.anchor, "shrub", index, attractionTarget));
+      anchorStates.push(createAnchorState(entry.anchor, "shrub", index));
     }
   });
 
   let elapsed = 0;
-  let attraction = 0;
   let previousFrameTime = performance.now();
   const observer = scene.onBeforeRenderObservable.add(() => {
     const frameTime = performance.now();
     elapsed += Math.min((frameTime - previousFrameTime) / 1000, 0.04);
     previousFrameTime = frameTime;
-    anchorStates.forEach((state) => animateAnchor(state, elapsed, attraction));
-    fernFrondStates.forEach((state) => animateFernFrond(state, elapsed, attraction));
+    anchorStates.forEach((state) => animateAnchor(state, elapsed));
+    fernFrondStates.forEach((state) => animateFernFrond(state, elapsed));
   });
 
   return {
-    setAttraction(amount) {
-      attraction = BABYLON.Scalar.Clamp(amount, 0, 1);
-    },
     dispose() {
       scene.onBeforeRenderObservable.remove(observer);
     },
   };
 }
 
-function createAnchorState(anchor, kind, index, attractionTarget) {
+function createAnchorState(anchor, kind, index) {
   return {
     anchor,
     kind,
@@ -64,12 +58,10 @@ function createAnchorState(anchor, kind, index, attractionTarget) {
     phase: index * 1.618 + (kind === "flower" ? 0.35 : 1.17),
     rate: kind === "flower" ? 0.34 + (index % 3) * 0.035 : 0.19 + (index % 3) * 0.028,
     amplitude: kind === "flower" ? 0.019 + (index % 2) * 0.004 : 0.009 + (index % 2) * 0.003,
-    attractionDirection: directionToward(anchor.position, attractionTarget),
-    attractionWeight: proximityToEntrance(anchor.position, attractionTarget),
   };
 }
 
-function createNodeState(node, phase, anchorPosition, attractionTarget) {
+function createNodeState(node, phase) {
   // glTF nodes may carry a quaternion. Convert it once so that a tiny local
   // frond offset can be composed without allocating quaternions every frame.
   if (node.rotationQuaternion) {
@@ -83,51 +75,30 @@ function createNodeState(node, phase, anchorPosition, attractionTarget) {
     phase,
     rate: 0.22 + (phase % 0.07),
     amplitude: 0.024 + ((phase * 7) % 0.013),
-    attractionDirection: directionToward(anchorPosition, attractionTarget),
-    attractionWeight: proximityToEntrance(anchorPosition, attractionTarget),
   };
 }
 
-function animateAnchor(state, time, attraction) {
+function animateAnchor(state, time) {
   const main = organicSway(time, state.rate, state.phase);
   const cross = organicSway(time, state.rate * 0.71, state.phase + 2.1);
   const pulse = 0.68 + Math.sin(time * 0.075 + state.phase) * 0.2;
   const amount = state.amplitude * pulse;
 
-  const directionalLean = attraction * state.attractionWeight * (state.kind === "flower" ? 0.15 : 0.075);
-  state.anchor.rotation.x = state.baseRotation.x + main * amount + state.attractionDirection.z * directionalLean;
-  state.anchor.rotation.z = state.baseRotation.z + cross * amount * 0.75 - state.attractionDirection.x * directionalLean;
+  state.anchor.rotation.x = state.baseRotation.x + main * amount;
+  state.anchor.rotation.z = state.baseRotation.z + cross * amount * 0.75;
   // Flowers occasionally rise a fraction more during a small local gust,
   // without becoming a detectable bobbing animation.
   state.anchor.position.y = state.basePosition.y + (state.kind === "flower" ? main * 0.006 : 0);
 }
 
-function animateFernFrond(state, time, attraction) {
+function animateFernFrond(state, time) {
   const main = organicSway(time, state.rate, state.phase);
   const cross = organicSway(time, state.rate * 1.37, state.phase + 1.8);
   const pulse = 0.58 + Math.sin(time * 0.065 + state.phase * 0.6) * 0.24;
   const amount = state.amplitude * pulse;
 
-  const directionalLean = attraction * state.attractionWeight * 0.11;
-  state.node.rotation.x = state.baseRotation.x + main * amount + state.attractionDirection.z * directionalLean;
-  state.node.rotation.z = state.baseRotation.z + cross * amount * 0.8 - state.attractionDirection.x * directionalLean;
-}
-
-function directionToward(position, target) {
-  if (!target) {
-    return BABYLON.Vector3.Zero();
-  }
-  const direction = target.subtract(position);
-  direction.y = 0;
-  return direction.lengthSquared() > 0.001 ? direction.normalize() : BABYLON.Vector3.Zero();
-}
-
-function proximityToEntrance(position, target) {
-  if (!target) {
-    return 0;
-  }
-  const distance = BABYLON.Vector3.Distance(position, target);
-  return BABYLON.Scalar.Clamp(1 - distance / 22, 0, 1);
+  state.node.rotation.x = state.baseRotation.x + main * amount;
+  state.node.rotation.z = state.baseRotation.z + cross * amount * 0.8;
 }
 
 /** Multiple slow frequencies avoid a synchronized, loop-like sine animation. */

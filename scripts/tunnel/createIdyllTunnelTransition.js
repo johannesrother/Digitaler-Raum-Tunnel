@@ -2,16 +2,13 @@ import {
   TUNNEL_DURATION,
   getTunnelDiameter,
   getTunnelPhase,
-  getTunnelSpeed,
 } from "./tunnelConfig.js";
 
-const PEACEFUL_DURATION = 14;
-const SUCTION_START = 18;
 const TUNNEL_START = 20;
 const TUNNEL_END = TUNNEL_START + TUNNEL_DURATION;
 const FALL_DURATION = 1;
 const WHITE_ROOM_DURATION = 5;
-const ACCELERATION_DURATION = 1.6;
+const MOVEMENT_EASE_IN_DURATION = 0.75;
 
 /**
  * The only automatic motion in the experience. A parent transform carries
@@ -21,8 +18,7 @@ export function createIdyllTunnelTransition(scene, options) {
   const root = new BABYLON.TransformNode("idyll-to-tunnel-locomotion-root", scene);
   const start = options.startPosition.clone();
   const entry = createEntryPath(start, options.entrance, options.initialForward, options.tunnel.route.start);
-  const suctionRoute = createSuctionRoute(entry);
-  const tunnelRoute = createTunnelTravelRoute(options.tunnel.route);
+  const tunnelRoute = createTunnelTravelRoute(entry, options.tunnel.route);
   const debug = createDebugPanel();
   let elapsed = 0;
   let xrCamera = null;
@@ -47,13 +43,9 @@ export function createIdyllTunnelTransition(scene, options) {
     const delta = Math.min((frameTime - previousFrameTime) / 1000, 0.04);
     previousFrameTime = frameTime;
     elapsed += delta;
-    options.breeze.setAttraction(attractionAmount(elapsed));
-    options.suctionDebris.update(elapsed);
     let tunnelTime = 0;
 
-    if (elapsed >= SUCTION_START && elapsed < TUNNEL_START) {
-      applyPathTransform(root, suctionRoute, suctionProgress(elapsed), initialHeading, delta);
-    } else if (elapsed >= TUNNEL_START && elapsed < TUNNEL_END) {
+    if (elapsed >= TUNNEL_START && elapsed < TUNNEL_END) {
       tunnelTime = elapsed - TUNNEL_START;
       options.tunnel.update(tunnelTime);
       applyPathTransform(root, tunnelRoute, tunnelTime, initialHeading, delta);
@@ -86,14 +78,14 @@ export function createIdyllTunnelTransition(scene, options) {
         if (isInXr) {
           xrCamera = xr.baseExperience.camera;
           xrCamera.parent = root;
-          syncRootToExperienceTime(root, elapsed, suctionRoute, tunnelRoute, options.whiteRoom, initialHeading);
+          syncRootToExperienceTime(root, elapsed, tunnelRoute, options.whiteRoom, initialHeading);
           return;
         }
         if (xrCamera) {
           xrCamera.parent = null;
           xrCamera = null;
         }
-        syncRootToExperienceTime(root, elapsed, suctionRoute, tunnelRoute, options.whiteRoom, initialHeading);
+        syncRootToExperienceTime(root, elapsed, tunnelRoute, options.whiteRoom, initialHeading);
       });
     },
     dispose() {
@@ -106,26 +98,6 @@ export function createIdyllTunnelTransition(scene, options) {
       root.dispose();
     },
   };
-}
-
-function attractionAmount(time) {
-  if (time <= PEACEFUL_DURATION) {
-    return 0;
-  }
-  if (time < SUCTION_START) {
-    return smoothstep((time - PEACEFUL_DURATION) / (SUCTION_START - PEACEFUL_DURATION)) * 0.28;
-  }
-  if (time < TUNNEL_START) {
-    return BABYLON.Scalar.Lerp(0.28, 1, smoothstep((time - SUCTION_START) / (TUNNEL_START - SUCTION_START)));
-  }
-  return 0;
-}
-
-function suctionProgress(time) {
-  const amount = BABYLON.Scalar.Clamp((time - SUCTION_START) / (TUNNEL_START - SUCTION_START), 0, 1);
-  // The route remains continuous, but most of its distance is covered in the
-  // final moments to make the pull unmistakable without a teleport.
-  return Math.pow(amount, 3.15);
 }
 
 function createEntryPath(start, entrance, initialForward, finish) {
@@ -141,16 +113,14 @@ function createEntryPath(start, entrance, initialForward, finish) {
   return points;
 }
 
-function createSuctionRoute(points) {
-  return createPolylineRoute(points, 1);
-}
-
-function createTunnelTravelRoute(tunnelRoute) {
-  const points = [];
+function createTunnelTravelRoute(entryPath, tunnelRoute) {
+  const points = [...entryPath];
   for (let index = 0; index <= 188; index += 1) {
     // The cap stays just ahead of the final ascent endpoint; the visitor can
     // never cross it or leave the visible tunnel volume.
-    points.push(tunnelRoute.positionAt(index / 188 * 0.986));
+    if (index > 0) {
+      points.push(tunnelRoute.positionAt(index / 188 * 0.986));
+    }
   }
   return createPolylineRoute(points, TUNNEL_DURATION, createDistanceTable);
 }
@@ -181,8 +151,8 @@ function createPolylineRoute(points, duration, distanceTableFactory = null) {
     tangentAt(time) {
       // A short future sample filters tiny spline detail without delaying the
       // turning response into a visible late rotation.
-      const lookAhead = duration === 1 ? 0.035 : 0.62;
-      const lookBehind = duration === 1 ? 0.012 : 0.18;
+      const lookAhead = 0.62;
+      const lookBehind = 0.18;
       const before = positionAt(Math.max(0, time - lookBehind));
       const after = positionAt(Math.min(duration, time + lookAhead));
       const tangent = after.subtract(before);
@@ -200,8 +170,7 @@ function createDistanceTable(totalLength) {
   let accumulated = 0;
   for (let index = 1; index <= intervals; index += 1) {
     const time = index / intervals * TUNNEL_DURATION;
-    const acceleration = smoothstep(time / ACCELERATION_DURATION);
-    accumulated += getTunnelSpeed(time) * acceleration * (TUNNEL_DURATION / intervals);
+    accumulated += smoothstep(time / MOVEMENT_EASE_IN_DURATION) * (TUNNEL_DURATION / intervals);
     values.push(accumulated);
   }
   return values.map((value, index) => ({ time: index / intervals * TUNNEL_DURATION, distance: value / accumulated * totalLength }));
@@ -244,12 +213,8 @@ function controlledFall(amount) {
   return clamped * clamped * (3 - 2 * clamped);
 }
 
-function syncRootToExperienceTime(root, elapsed, suctionRoute, tunnelRoute, whiteRoom, initialHeading) {
-  if (elapsed < SUCTION_START) {
-    return;
-  }
+function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initialHeading) {
   if (elapsed < TUNNEL_START) {
-    applyPathTransform(root, suctionRoute, suctionProgress(elapsed), initialHeading, 0);
     return;
   }
   if (elapsed < TUNNEL_END) {
@@ -288,7 +253,7 @@ function createDebugPanel() {
         `Phase: ${phase.id}`,
         `Progress: ${(tunnelTime / TUNNEL_DURATION * 100).toFixed(0)} %`,
         `Diameter: ${getTunnelDiameter(tunnelTime).toFixed(2)} m`,
-        `Speed: ${getTunnelSpeed(tunnelTime).toFixed(2)} m/s`,
+        "Speed: controlled",
       ].join("\n");
     },
     dispose() {

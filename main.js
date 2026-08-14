@@ -31,7 +31,6 @@ async function startExperience() {
       scene.metadata.tunnel.dispose();
       scene.metadata.whiteRoomTone.dispose();
       scene.metadata.whiteRoom.dispose();
-      scene.metadata.suctionDebris.dispose();
       scene.dispose();
       engine.dispose();
     },

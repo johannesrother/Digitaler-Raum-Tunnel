@@ -3,7 +3,6 @@ import { createIdyllEnvironment } from "../environment/createIdyllEnvironment.js
 import { createOrganicTunnel } from "../tunnel/createOrganicTunnel.js";
 import { clearTunnelTerrain } from "../tunnel/clearTunnelTerrain.js";
 import { createIdyllTunnelTransition } from "../tunnel/createIdyllTunnelTransition.js";
-import { createSuctionDebris } from "../tunnel/createSuctionDebris.js";
 import { createWhiteRoom } from "../whiteRoom/createWhiteRoom.js";
 import { createWhiteRoomTone } from "../audio/createWhiteRoomTone.js";
 
@@ -30,11 +29,9 @@ export async function createIdyllScene(engine, canvas) {
   // no lateral jump before the controlled vertical fall begins.
   const whiteRoom = createWhiteRoom(scene, tunnel.route.positionAt(0.986));
   const whiteRoomTone = createWhiteRoomTone();
-  const suctionDebris = createSuctionDebris(scene, environment.architecture.entrance);
   const transition = createIdyllTunnelTransition(scene, {
     startPosition: environment.startPosition,
     entrance: environment.architecture.entrance,
-    breeze: environment.breeze,
     desktopCamera,
     tunnel,
     entranceFade: environment.architecture.tunnel.fade,
@@ -42,9 +39,8 @@ export async function createIdyllScene(engine, canvas) {
     initialForward: desktopCamera.getForwardRay(1).direction.clone(),
     whiteRoom,
     whiteRoomTone,
-    suctionDebris,
   });
-  scene.metadata = { environment, desktopCamera, tunnel, transition, whiteRoom, whiteRoomTone, suctionDebris };
+  scene.metadata = { environment, desktopCamera, tunnel, transition, whiteRoom, whiteRoomTone };
 
   return scene;
 }
