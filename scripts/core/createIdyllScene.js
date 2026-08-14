@@ -1,7 +1,7 @@
 import { createDesktopCamera } from "../camera/createDesktopCamera.js";
 import { createIdyllEnvironment } from "../environment/createIdyllEnvironment.js";
 import { createOrganicTunnel } from "../tunnel/createOrganicTunnel.js";
-import { clearTunnelTerrain } from "../tunnel/clearTunnelTerrain.js";
+import { clearTunnelTerrain, removeIdyllObjectsFromTunnel } from "../tunnel/clearTunnelTerrain.js";
 import { createIdyllTunnelTransition } from "../tunnel/createIdyllTunnelTransition.js";
 import { createWhiteRoom } from "../whiteRoom/createWhiteRoom.js";
 import { createWhiteRoomTone } from "../audio/createWhiteRoomTone.js";
@@ -26,6 +26,7 @@ export async function createIdyllScene(engine, canvas) {
     ],
     tunnel.route,
   );
+  removeIdyllObjectsFromTunnel(environment.assets.placed, tunnel.route);
   environment.lighting.excludeFromTunnel(tunnel.mesh);
   const tunnelExit = tunnel.route.positionAt(0.986);
   const exitDirection = tunnel.route.tangentAt(0.986);
