@@ -15,7 +15,7 @@ export async function createDreamyIdyll(scene, startPosition) {
   const lights = createDreamyLighting(scene);
   const libraries = await loadNatureLibraries(scene, world);
   const vegetation = placeNature(scene, world, libraries, startPosition);
-  const atmosphere = createAtmosphere(scene, world, startPosition, vegetation.swayAnchors, sky.material);
+  const atmosphere = createAtmosphere(scene, world, startPosition, vegetation.swayAnchors, sky);
 
   return {
     world,
@@ -121,22 +121,33 @@ function createDreamySky(scene, world) {
     precision highp float;
     varying vec3 vDirection;
     uniform float time;
-    float cloud(vec2 p) {
-      float a = sin(p.x * 1.2 + sin(p.y * 1.7)) * 0.5 + 0.5;
-      float b = sin(p.y * 2.3 - p.x * 0.6) * 0.5 + 0.5;
-      return smoothstep(0.72, 0.91, a * 0.63 + b * 0.37);
+    float softSpot(vec3 direction, vec3 center, float focus) {
+      return pow(max(dot(direction, normalize(center)), 0.0), focus);
     }
     void main(void) {
       vec3 d = normalize(vDirection);
-      float h = clamp(d.y * 0.72 + 0.31, 0.0, 1.0);
-      vec3 horizon = vec3(1.0, 0.85, 0.78);
-      vec3 middle = vec3(0.63, 0.80, 0.91);
-      vec3 zenith = vec3(0.40, 0.66, 0.88);
+      float h = clamp(d.y * 0.74 + 0.30, 0.0, 1.0);
+      vec3 horizon = vec3(1.0, 0.87, 0.81);
+      vec3 middle = vec3(0.69, 0.83, 0.92);
+      vec3 zenith = vec3(0.49, 0.70, 0.89);
       vec3 color = mix(horizon, middle, smoothstep(0.04, 0.58, h));
-      color = mix(color, zenith, smoothstep(0.48, 0.96, h) * 0.7);
-      float zone = smoothstep(0.31, 0.47, h) * (1.0 - smoothstep(0.67, 0.82, h));
-      float softCloud = cloud(d.xz * 2.0 + vec2(time * 0.0018, time * 0.0011));
-      color = mix(color, vec3(1.0, 0.96, 0.91), softCloud * zone * 0.26);
+      color = mix(color, zenith, smoothstep(0.48, 0.96, h) * 0.66);
+      float horizonHaze = 1.0 - smoothstep(0.04, 0.28, h);
+      color = mix(color, vec3(1.0, 0.90, 0.84), horizonHaze * 0.15);
+      float azimuth = atan(d.z, d.x);
+      float ridge = 0.012 + sin(azimuth * 2.7 + 0.4) * 0.012 + sin(azimuth * 6.1 - 1.3) * 0.006;
+      float distantLand = 1.0 - smoothstep(ridge, ridge + 0.043, d.y);
+      color = mix(color, vec3(0.68, 0.75, 0.68), distantLand * 0.23);
+      float clouds = 0.0;
+      clouds += softSpot(d, vec3(0.42 + sin(time * 0.011) * 0.025, 0.29, 0.86), 105.0);
+      clouds += softSpot(d, vec3(0.57 + sin(time * 0.009 + 1.2) * 0.025, 0.33, 0.76), 138.0);
+      clouds += softSpot(d, vec3(-0.64 + sin(time * 0.007 + 2.4) * 0.02, 0.39, 0.65), 95.0);
+      clouds += softSpot(d, vec3(-0.49 + sin(time * 0.012 + 0.8) * 0.02, 0.43, 0.76), 145.0);
+      clouds += softSpot(d, vec3(-0.15 + sin(time * 0.008 + 4.2) * 0.03, 0.55, -0.82), 92.0);
+      clouds += softSpot(d, vec3(0.18 + sin(time * 0.01 + 3.1) * 0.025, 0.47, -0.87), 132.0);
+      color = mix(color, vec3(1.0, 0.97, 0.92), min(clouds, 1.0) * 0.2);
+      float sun = softSpot(d, vec3(-0.68, 0.1, 0.72), 1750.0);
+      color = mix(color, vec3(1.0, 0.89, 0.70), sun * 0.54);
       gl_FragColor = vec4(color, 1.0);
     }
   `;
@@ -159,7 +170,12 @@ function createDreamySky(scene, world) {
   sky.material = material;
   sky.infiniteDistance = true;
   sky.isPickable = false;
-  return { sky, material };
+  return {
+    sky,
+    update(time) {
+      material.setFloat("time", time);
+    },
+  };
 }
 
 function createDreamyLighting(scene) {
@@ -308,7 +324,7 @@ function createInstanceGroup(scene, world, library, name, placement, startPositi
   return anchor;
 }
 
-function createAtmosphere(scene, world, startPosition, swayAnchors, skyMaterial) {
+function createAtmosphere(scene, world, startPosition, swayAnchors, sky) {
   const pollenTemplate = BABYLON.MeshBuilder.CreateSphere("dreamy-pollen-template", { diameter: 0.045, segments: 4 }, scene);
   pollenTemplate.parent = world;
   pollenTemplate.isVisible = false;
@@ -340,7 +356,7 @@ function createAtmosphere(scene, world, startPosition, swayAnchors, skyMaterial)
       state.anchor.rotation.z = Math.sin(elapsed * rate + state.phase) * amplitude;
       state.anchor.rotation.x = Math.sin(elapsed * rate * 0.73 + state.phase * 1.7) * amplitude * 0.55;
     });
-    skyMaterial.setFloat("time", elapsed);
+    sky.update(elapsed);
   });
   return { dispose: () => scene.onBeforeRenderObservable.remove(observer) };
 }
