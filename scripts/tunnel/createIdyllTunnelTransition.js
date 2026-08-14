@@ -13,8 +13,9 @@ const WHITE_ROOM_ARRIVAL_DURATION = 1;
 const WHITE_ROOM_DURATION = 5;
 const WHITE_PREVIEW_START = 30;
 const TUNNEL_BLEND_DURATION = 2;
-const FINAL_PULL_START = 53;
+const FINAL_PULL_START = 52;
 const FINAL_PULL_DURATION = TUNNEL_DURATION - FINAL_PULL_START;
+const FINAL_PULL_STRENGTH = 1.2;
 const RIFT_APPROACH_REMAINING_TIME = 3.4;
 const RIFT_CLOSE_DURATION = 1.4;
 const ENTRY_ROUTE_EASE_DURATION = 0.75;
@@ -100,7 +101,7 @@ export function createIdyllTunnelTransition(scene, options) {
       const releaseStartSlope = BABYLON.Scalar.Clamp(
         releaseStartSpeed * WHITE_ROOM_ARRIVAL_DURATION / Math.max(releaseDistance, 0.001),
         0.15,
-        1.15,
+        1.45,
       );
       const arrival = finalReleaseProgress(whiteElapsed / WHITE_ROOM_ARRIVAL_DURATION, releaseStartSlope);
       root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, options.whiteRoom.finalPosition, arrival));
@@ -347,7 +348,7 @@ function finalTunnelTravelTime(tunnelTime) {
     return tunnelTime;
   }
   const progress = BABYLON.Scalar.Clamp((tunnelTime - FINAL_PULL_START) / FINAL_PULL_DURATION, 0, 1);
-  const pulledProgress = progress + 0.72 * (progress ** 5 - progress ** 3);
+  const pulledProgress = progress + FINAL_PULL_STRENGTH * (progress ** 5 - progress ** 3);
   return FINAL_PULL_START + FINAL_PULL_DURATION * pulledProgress;
 }
 
@@ -357,7 +358,7 @@ function finalTunnelSpeedMultiplier(tunnelTime = TUNNEL_DURATION) {
   }
   const progress = BABYLON.Scalar.Clamp((tunnelTime - FINAL_PULL_START) / FINAL_PULL_DURATION, 0, 1);
   // Derivative of finalTunnelTravelTime.
-  return 1 + 0.72 * (5 * progress ** 4 - 3 * progress ** 2);
+  return 1 + FINAL_PULL_STRENGTH * (5 * progress ** 4 - 3 * progress ** 2);
 }
 
 function finalReleaseProgress(value, initialSlope) {

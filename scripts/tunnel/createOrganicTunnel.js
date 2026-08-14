@@ -287,7 +287,7 @@ function getLocalContraction(progress, angle, targetIndex) {
 function getJourneyDeformationStrength(time) {
   const arrival = smoothstep((time - 4) / 16);
   const compression = smoothstep((time - 18) / 34);
-  const finalConstriction = smoothstep((time - 51) / 7);
+  const finalConstriction = smoothstep((time - 50) / 10);
   const release = 1 - smoothstep((time - 58.6) / 1.4);
   // The final wave presses forward through the funnel, then vanishes as the
   // visitor crosses into the White Room.
@@ -303,9 +303,9 @@ function getPressureWaveInfluence(time, targetIndex) {
   const advancingWave = wrap01(0.16 + time * 0.017 + Math.sin(time * 0.11) * 0.04);
   const returningPressure = circularBell(targetCenter, returningWave, 0.14);
   const advancingPressure = circularBell(targetCenter, advancingWave, 0.2) * 0.48;
-  const finalPush = smoothstep((time - 52) / 7);
-  const exitBoundWave = 0.12 + BABYLON.Scalar.Clamp((time - 52) / 7, 0, 1) * 0.76;
-  const expulsionPressure = circularBell(targetCenter, exitBoundWave, 0.15) * finalPush;
+  const finalPush = smoothstep((time - 50) / 10);
+  const exitBoundWave = 0.08 + BABYLON.Scalar.Clamp((time - 50) / 10, 0, 1) * 0.8;
+  const expulsionPressure = circularBell(targetCenter, exitBoundWave, 0.15) * finalPush * 1.28;
   const breath = 0.06 + 0.06 * (0.5 + 0.5 * Math.sin(time * (0.31 + targetIndex * 0.037) + targetIndex * 1.83));
   const lateIntensity = 0.66 + smoothstep((time - 16) / 35) * 0.34;
   return BABYLON.Scalar.Clamp((returningPressure + advancingPressure + expulsionPressure + breath) * lateIntensity, 0, 1);
@@ -313,10 +313,10 @@ function getPressureWaveInfluence(time, targetIndex) {
 
 function getFinalFunnelDiameter(time) {
   const baseDiameter = getTunnelDiameter(time);
-  const finalProgress = smoothstep((time - 50) / 10);
+  const finalProgress = smoothstep((time - 48) / 12);
   // At the tightest point the varying cross-section yields an approximately
-  // 0.8 m visual aperture, while the uncollided camera path remains central.
-  return BABYLON.Scalar.Lerp(baseDiameter, 1.0, finalProgress);
+  // 0.3 m visual aperture, while the uncollided camera path remains central.
+  return BABYLON.Scalar.Lerp(baseDiameter, 0.38, finalProgress);
 }
 
 function bell(value, center, width) {
