@@ -23,7 +23,7 @@ export function createIdyllTunnelTransition(scene, options) {
   const debug = createDebugPanel();
   let elapsed = 0;
   let xrCamera = null;
-  let outsideGroundHidden = false;
+  let previousWorldHidden = false;
   let whiteRoomFinished = false;
   let previousFrameTime = performance.now();
   const initialHeading = headingFrom(options.initialForward);
@@ -51,17 +51,14 @@ export function createIdyllTunnelTransition(scene, options) {
       options.tunnel.update(tunnelTime);
       applyPathTransform(root, tunnelRoute, tunnelTime, initialHeading, delta);
       options.whiteRoom.preview(smoothstep((tunnelTime - WHITE_PREVIEW_START) / (TUNNEL_DURATION - WHITE_PREVIEW_START)));
-      // Keep the idyll readable behind the visitor immediately after crossing
-      // the threshold, then remove its large ground surfaces before they can
-      // intrude into the deeper tunnel volume.
-      if (!outsideGroundHidden && tunnelTime >= 6) {
-        options.outsideGroundMeshes.forEach((mesh) => mesh.setEnabled(false));
-        outsideGroundHidden = true;
-      }
     } else if (elapsed >= TUNNEL_END) {
       activateWhiteRoom(options, root);
       const arrival = smoothstep((elapsed - TUNNEL_END) / WHITE_ROOM_ARRIVAL_DURATION);
       root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, options.whiteRoom.finalPosition, arrival));
+      if (!previousWorldHidden && elapsed >= TUNNEL_END + WHITE_ROOM_ARRIVAL_DURATION) {
+        isolatePreviousWorld(options);
+        previousWorldHidden = true;
+      }
       if (!whiteRoomFinished && elapsed >= TUNNEL_END + WHITE_ROOM_DURATION) {
         options.whiteRoomTone.deactivate();
         whiteRoomFinished = true;
@@ -198,12 +195,17 @@ function activateWhiteRoom(options, root) {
     return;
   }
   options.whiteRoomActive = true;
-  options.tunnel.setEnabled(false);
-  options.tunnel.setSequenceActive(false);
   options.whiteRoom.activate();
   options.whiteRoomTone.activate();
   root.rotation.x = 0;
   root.rotation.z = 0;
+}
+
+function isolatePreviousWorld(options) {
+  options.tunnel.setEnabled(false);
+  options.tunnel.setSequenceActive(false);
+  options.previousWorldMeshes.forEach((mesh) => mesh.setEnabled(false));
+  options.previousWorldLights.forEach((light) => light.setEnabled(false));
 }
 
 function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initialHeading) {

@@ -37,10 +37,11 @@ export async function createIdyllScene(engine, canvas) {
     desktopCamera,
     tunnel,
     entranceFade: environment.architecture.tunnel.fade,
-    outsideGroundMeshes: [environment.terrain.terrain, environment.terrain.distantHorizon],
     initialForward: desktopCamera.getForwardRay(1).direction.clone(),
     whiteRoom,
     whiteRoomTone,
+    previousWorldMeshes: scene.meshes.filter((mesh) => mesh.name !== "white-room-endless-void"),
+    previousWorldLights: [...scene.lights],
   });
   scene.metadata = { environment, desktopCamera, tunnel, transition, whiteRoom, whiteRoomTone };
 
